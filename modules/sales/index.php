@@ -101,6 +101,12 @@ if (in_array($role, ['Manager', 'Admin'], true)) {
 
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
+        <!-- Live-search wires up against this container: it caches this exact
+             markup on page load and swaps it out for filtered results as you
+             type in the topbar search box, restoring it when the box is
+             cleared. The discount/cancel-approval panels above are separate
+             management widgets, not search results, so they stay outside. -->
+        <div id="pageResultsContainer">
         <div class="table-responsive">
         <table class="table table-bordered table-hover bg-white mb-0">
             <tr>
@@ -143,11 +149,15 @@ if (in_array($role, ['Manager', 'Admin'], true)) {
             <a href="request_cancel.php?id=<?= (int) $sale['id']; ?>" class="btn btn-outline-warning btn-sm">Request Cancel</a>
         <?php } ?>
     <?php } ?>
+                </td>
             </tr>
             <?php } ?>
         </table>
         </div>
+        </div>
+        <div id="pageResultsPagination">
         <?php render_pagination($currentPage, $totalPages); ?>
+        </div>
     </div>
 </div>
 

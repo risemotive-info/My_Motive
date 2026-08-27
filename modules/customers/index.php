@@ -15,7 +15,7 @@ $customers = mysqli_query($conn, "SELECT customers.*, COALESCE(SUM(CASE WHEN sal
     <a href="create.php" class="rm-btn rm-btn-primary">+ Add Customer</a>
 </div>
 <div class="card border-0 shadow-sm">
-    <div class="card-body p-0">
+    <div class="card-body p-0" id="pageResultsContainer">
         <table class="table table-bordered table-hover bg-white mb-0">
 <tr>
     <th>Name</th>

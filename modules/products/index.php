@@ -47,6 +47,10 @@ $lowStockCount = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FR
 
 <div class="card shadow">
 <div class="card-body">
+<!-- Live-search wires up against this container: it caches this exact markup
+     on page load and swaps it out for filtered results as you type in the
+     topbar search box, restoring it when the box is cleared. -->
+<div id="pageResultsContainer">
 <div style="overflow-x:auto;">
 <table class="table table-bordered table-hover">
 <tr>
@@ -94,7 +98,10 @@ $lowStockCount = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FR
 <?php } ?>
 </table>
 </div>
+</div>
+<div id="pageResultsPagination">
 <?php render_pagination($currentPage, $totalPages); ?>
+</div>
 </div>
 </div>
 

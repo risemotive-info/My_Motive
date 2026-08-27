@@ -1,6 +1,6 @@
 <?php
 require '../../config/db.php';
-$pageSearchScope = 'employees   '; // tells the topbar search what module we're in
+$pageSearchScope = 'employees'; // tells the topbar search what module we're in
 require_role(['Admin']);
 require '../../includes/pagination.php';
 include '../../includes/header.php';
@@ -38,6 +38,10 @@ $result = mysqli_query($conn, $query);
 
 <div class="card border-0 shadow-sm">
 <div class="card-body p-0">
+<!-- Live-search wires up against this container: it caches this exact markup
+     on page load and swaps it out for filtered results as you type in the
+     topbar search box, restoring it when the box is cleared. -->
+<div id="pageResultsContainer">
 <div style="overflow-x:auto;">
 <table class="table table-bordered table-hover bg-white mb-0">
 <tr>
@@ -82,10 +86,13 @@ $result = mysqli_query($conn, $query);
         </form>
     </td>
 </tr>
-</td> 
 <?php } ?>
 </table>
+</div>
+</div>
+<div id="pageResultsPagination">
 <?php render_pagination($currentPage, $totalPages); ?>
+</div>
 </div>
 </div>
 <script>

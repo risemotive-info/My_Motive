@@ -1,6 +1,11 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 require '../../config/db.php';
 require '../../includes/notification_helper.php';
+
+$isAdmin = isset($_SESSION['user_role']) && strtolower($_SESSION['user_role']) === 'admin';
 $employees = mysqli_query($conn, 'SELECT id, names FROM users WHERE is_active = 1 ORDER BY names');
 
 if (isset($_POST['save'])) {
@@ -15,9 +20,29 @@ if (isset($_POST['save'])) {
     if (!in_array($category, ['Product', 'Service'], true) || !in_array($type, ['Income', 'Expense'], true) || $amount === false || $amount <= 0 || !$validDate || $validDate->format('Y-m-d') !== $transactionDate) {
         $error = 'Please provide a valid category, type, amount, and date.';
     } else {
-        $statement = mysqli_prepare($conn, 'INSERT INTO transactions (category, transaction_type, amount, transaction_date, description, recorded_by) VALUES (?, ?, ?, ?, ?, ?)');
-        mysqli_stmt_bind_param($statement, 'ssdssi', $category, $type, $amount, $transactionDate, $description, $recordedBy);
-        if (mysqli_stmt_execute($statement)) { header('Location: index.php?success=Transaction recorded successfully.'); exit; }
+        $status = $isAdmin ? 'approved' : 'pending';
+
+        $statement = mysqli_prepare($conn, 'INSERT INTO transactions (category, transaction_type, amount, transaction_date, description, recorded_by, status) VALUES (?, ?, ?, ?, ?, ?, ?)');
+        mysqli_stmt_bind_param($statement, 'ssdssis', $category, $type, $amount, $transactionDate, $description, $recordedBy, $status);
+
+        if (mysqli_stmt_execute($statement)) {
+            if (!$isAdmin) {
+                $newId = mysqli_insert_id($conn);
+                $admins = mysqli_query($conn, "SELECT id FROM users WHERE role = 'admin' AND is_active = 1");
+                while ($admin = mysqli_fetch_assoc($admins)) {
+                    notifyUser(
+                        $conn,
+                        $admin['id'],
+                        'Transaction Approval Needed',
+                        'A new ' . strtolower($type) . ' of RWF ' . number_format($amount, 2) . ' is awaiting your approval (#' . $newId . ').'
+                    );
+                }
+                header('Location: index.php?success=Transaction submitted for admin approval.');
+            } else {
+                header('Location: index.php?success=Transaction recorded successfully.');
+            }
+            exit;
+        }
         $error = 'Unable to save the transaction.';
     }
 }
@@ -26,7 +51,7 @@ include '../../includes/header.php'; include '../../includes/sidebar.php';
 
 $modal_icon = 'bi-cash-coin';
 $modal_title = 'Add Transaction';
-$modal_subtitle = 'Record a new income or expense entry.';
+$modal_subtitle = $isAdmin ? 'Record a new income or expense entry.' : 'Submit an entry for admin approval.';
 ?>
 
 <div class="rm-modal-backdrop">
@@ -38,6 +63,13 @@ $modal_subtitle = 'Record a new income or expense entry.';
             <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" style="border-radius:10px; border:none; background:var(--accent-red-bg); color:var(--accent-red); font-size:13px; padding:10px 14px;">
                 <i class="bi bi-exclamation-circle-fill"></i>
                 <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?>
+            </div>
+            <?php } ?>
+
+            <?php if (!$isAdmin) { ?>
+            <div class="alert alert-info d-flex align-items-center gap-2 mb-3" style="border-radius:10px; border:none; font-size:13px; padding:10px 14px;">
+                <i class="bi bi-info-circle-fill"></i>
+                This transaction will be sent to an admin for approval before it appears in totals.
             </div>
             <?php } ?>
 
@@ -88,7 +120,7 @@ $modal_subtitle = 'Record a new income or expense entry.';
 
                 <div class="d-grid gap-2 d-md-flex justify-content-end mt-4">
                     <button type="submit" name="save" class="rm-btn rm-btn-primary">
-                        <i class="bi bi-check-circle-fill me-2"></i>Save Transaction
+                        <i class="bi bi-check-circle-fill me-2"></i><?= $isAdmin ? 'Save Transaction' : 'Submit for Approval'; ?>
                     </button>
                     <a href="index.php" class="rm-btn rm-btn-secondary">
                         <i class="bi bi-x-circle-fill me-2"></i>Cancel

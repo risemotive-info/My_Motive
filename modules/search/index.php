@@ -5,7 +5,7 @@ include '../../includes/sidebar.php';
 
 $q = trim($_GET['q'] ?? '');
 $scope = $_GET['scope'] ?? 'all';
-$allowedScopes = ['all', 'employees', 'products', 'customers', 'departments', 'attendance', 'leave', 'projects', 'tasks', 'transactions', 'sales'];
+$allowedScopes = ['all', 'employees', 'products', 'customers', 'departments', 'attendance', 'leave', 'projects', 'tasks', 'transactions', 'sales', 'notifications', 'categories'];
 if (!in_array($scope, $allowedScopes, true)) {
     $scope = 'all';
 }
@@ -24,6 +24,8 @@ $projects = [];
 $tasks = [];
 $transactions = [];
 $sales = [];
+$notifications = [];
+$categories = [];
 
 if ($q !== '') {
     $like = '%' . $q . '%';
@@ -106,10 +108,28 @@ if ($q !== '') {
         mysqli_stmt_execute($saleStatement);
         $sales = mysqli_fetch_all(mysqli_stmt_get_result($saleStatement), MYSQLI_ASSOC);
     }
+
+    if ($scope === 'all' || $scope === 'notifications') {
+        $notificationStatement = mysqli_prepare($conn, "SELECT notifications.id, notifications.title, notifications.message, notifications.is_read, notifications.created_at, users.names
+            FROM notifications LEFT JOIN users ON notifications.user_id = users.id
+            WHERE users.names LIKE ? OR notifications.title LIKE ? OR notifications.message LIKE ?
+            ORDER BY notifications.id DESC LIMIT $limit");
+        mysqli_stmt_bind_param($notificationStatement, 'sss', $like, $like, $like);
+        mysqli_stmt_execute($notificationStatement);
+        $notifications = mysqli_fetch_all(mysqli_stmt_get_result($notificationStatement), MYSQLI_ASSOC);
+    }
+
+    if ($scope === 'all' || $scope === 'categories') {
+        $categoryStatement = mysqli_prepare($conn, "SELECT id, category_name, description, is_active, created_at FROM categories WHERE category_name LIKE ? OR description LIKE ? ORDER BY category_name LIMIT $limit");
+        mysqli_stmt_bind_param($categoryStatement, 'ss', $like, $like);
+        mysqli_stmt_execute($categoryStatement);
+        $categories = mysqli_fetch_all(mysqli_stmt_get_result($categoryStatement), MYSQLI_ASSOC);
+    }
 }
 
 $totalResults = count($employees) + count($products) + count($customers) + count($sales)
-    + count($departments) + count($attendance) + count($leaveRequests) + count($projects) + count($tasks) + count($transactions);
+    + count($departments) + count($attendance) + count($leaveRequests) + count($projects) + count($tasks) + count($transactions)
+    + count($notifications) + count($categories);
 
 // Friendly label for the scoped heading, e.g. "Customers matching 'mugisha'"
 $scopeLabels = [
@@ -123,6 +143,8 @@ $scopeLabels = [
     'tasks' => 'Tasks',
     'transactions' => 'Transactions',
     'sales' => 'Sales',
+    'notifications' => 'Notifications',
+    'categories' => 'Categories',
 ];
 ?>
 
@@ -333,6 +355,47 @@ $scopeLabels = [
                     <td>RWF <?= number_format($s['total_amount'], 2); ?></td>
                     <td><span class="badge bg-secondary"><?= htmlspecialchars($s['status'], ENT_QUOTES, 'UTF-8'); ?></span></td>
                     <td class="text-end"><a href="../sales/invoice.php?id=<?= (int) $s['id']; ?>" target="_blank" class="btn btn-info btn-sm">View</a></td>
+                </tr>
+                <?php } ?>
+            </table>
+            </div>
+        </div>
+    </div>
+    <?php } ?>
+
+    <?php if (!empty($notifications)) { ?>
+    <div class="card shadow mb-4">
+        <div class="card-header d-flex align-items-center gap-2"><i class="bi bi-bell-fill"></i> Notifications</div>
+        <div class="card-body p-0">
+            <div style="overflow-x:auto;">
+            <table class="table table-hover mb-0">
+                <?php foreach ($notifications as $n) { ?>
+                <tr>
+                    <td><?= htmlspecialchars($n['names'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td class="text-muted"><?= htmlspecialchars($n['title'], ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td class="text-muted"><?= htmlspecialchars(mb_strimwidth($n['message'] ?? '', 0, 60, '...'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><span class="badge bg-<?= $n['is_read'] ? 'success' : 'warning text-dark'; ?>"><?= $n['is_read'] ? 'Read' : 'Unread'; ?></span></td>
+                    <td class="text-end"><a href="../notifications/index.php" class="btn btn-info btn-sm">View</a></td>
+                </tr>
+                <?php } ?>
+            </table>
+            </div>
+        </div>
+    </div>
+    <?php } ?>
+
+    <?php if (!empty($categories)) { ?>
+    <div class="card shadow mb-4">
+        <div class="card-header d-flex align-items-center gap-2"><i class="bi bi-tags-fill"></i> Categories</div>
+        <div class="card-body p-0">
+            <div style="overflow-x:auto;">
+            <table class="table table-hover mb-0">
+                <?php foreach ($categories as $c) { ?>
+                <tr>
+                    <td><?= htmlspecialchars($c['category_name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td class="text-muted"><?= htmlspecialchars(mb_strimwidth($c['description'] ?? '', 0, 60, '...'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><span class="badge bg-<?= $c['is_active'] ? 'success' : 'secondary'; ?>"><?= $c['is_active'] ? 'Active' : 'Inactive'; ?></span></td>
+                    <td class="text-end"><a href="../categories/index.php" class="btn btn-info btn-sm">View</a></td>
                 </tr>
                 <?php } ?>
             </table>

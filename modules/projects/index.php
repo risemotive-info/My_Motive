@@ -30,7 +30,12 @@ $projects = mysqli_query($conn, $sql);
     <?php } ?>
 </div>
 
-<div class="card border-0 shadow-sm"><div class="card-body p-0"><div class="table-responsive">
+<div class="card border-0 shadow-sm"><div class="card-body p-0">
+<!-- Live-search wires up against this container: it caches this exact markup
+     on page load and swaps it out for filtered results as you type in the
+     topbar search box, restoring it when the box is cleared. -->
+<div id="pageResultsContainer">
+<div class="table-responsive">
 <table class="table table-bordered table-hover bg-white mb-0">
     <tr><th>No.</th><th>Project</th><th>Dates</th><th>Status</th><th>Created By</th><th>Action</th></tr>
     <?php if (mysqli_num_rows($projects) === 0) { ?>
@@ -57,5 +62,7 @@ $projects = mysqli_query($conn, $sql);
         </tr>
     <?php } ?>
 </table>
-</div></div></div>
+</div>
+</div>
+</div></div>
 <?php include '../../includes/footer.php'; ?>

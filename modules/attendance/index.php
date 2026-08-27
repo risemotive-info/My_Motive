@@ -127,7 +127,7 @@ function workflow_badge($status) {
 
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
-        <div class="table-responsive">
+        <div class="table-responsive" id="pageResultsContainer">
             <table class="table table-bordered table-hover bg-white mb-0">
                 <tr>
                     <th>Date</th>
@@ -164,7 +164,9 @@ function workflow_badge($status) {
                 <?php } ?>
             </table>
         </div>
+        <div id="pageResultsPagination">
         <?php render_pagination($currentPage, $totalPages, $date !== '' ? ['date' => $date] : []); ?>
+        </div>
     </div>
 </div>
 

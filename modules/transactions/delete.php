@@ -1,6 +1,5 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
-var_dump($_SESSION); exit;
 require '../../config/db.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

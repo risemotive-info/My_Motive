@@ -48,6 +48,12 @@ function task_status_badge($status) {
 
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
+        <!-- Live-search wires up against this container: it caches this exact
+             markup on page load and swaps it out for filtered results as you
+             type in the topbar search box, restoring it when the box is
+             cleared. Employees only ever see (and search) their own tasks,
+             matching this page's own $whereClause restriction. -->
+        <div id="pageResultsContainer">
         <div class="table-responsive">
             <table class="table table-bordered table-hover bg-white mb-0">
                 <tr><th>Task</th><th>Project</th><th>Assigned To</th><th>Priority</th><th>Due Date</th><th>Status</th><th>Score</th><th>Action</th></tr>
@@ -89,7 +95,10 @@ function task_status_badge($status) {
                 <?php } ?>
             </table>
         </div>
+        </div>
+        <div id="pageResultsPagination">
         <?php render_pagination($currentPage, $totalPages); ?>
+        </div>
     </div>
 </div>
 

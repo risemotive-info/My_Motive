@@ -85,6 +85,12 @@ function leave_status_badge($status) {
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-white"><h5 class="mb-0">My Leave Requests</h5></div>
     <div class="card-body p-0">
+        <!-- Live-search wires up against this container: it caches this exact
+             markup on page load and swaps it out for filtered results as you
+             type in the topbar search box, restoring it when the box is
+             cleared. Only searches YOUR leave requests, matching this page's
+             own query — the approval queue above stays untouched. -->
+        <div id="pageResultsContainer">
         <table class="table table-bordered table-hover bg-white mb-0">
             <tr>
                 <th>Type</th>
@@ -106,8 +112,11 @@ function leave_status_badge($status) {
             </tr>
             <?php } ?>
         </table>
+        </div>
     </div>
+    <div id="pageResultsPagination">
     <?php render_pagination($currentPage, $totalPages); ?>
+    </div>
 </div>
 
 <?php include '../../includes/footer.php'; ?>

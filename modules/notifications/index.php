@@ -40,7 +40,7 @@ $result = mysqli_query($conn, $query);
 
 <div class="card shadow">
 
-<div class="card-body">
+<div class="card-body" id="pageResultsContainer">
 
 <table class="table table-bordered table-hover">
 

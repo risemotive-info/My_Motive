@@ -41,7 +41,7 @@ $initials = strtoupper(substr($userName, 0, 1) . (strpos($userName, ' ') !== fal
     </a>
 
     <a href="../projects/index.php" class="<?= navActive('projects', $currentPath) ?>">
-        <i class="bi bi-folder-fill"></i> Projects
+        <i class="bi bi-folder-fill"></i> RM Targets
     </a>
 
     <a href="../tasks/index.php" class="<?= navActive('tasks', $currentPath) ?>">
@@ -53,7 +53,7 @@ $initials = strtoupper(substr($userName, 0, 1) . (strpos($userName, ' ') !== fal
     </a>
 
     <a href="../products/index.php" class="<?= navActive('products', $currentPath) ?>">
-        <i class="bi bi-box-seam"></i> Products
+        <i class="bi bi-box-seam"></i> RM Offerings
     </a>
 
     <a href="../customers/index.php" class="<?= navActive('customers', $currentPath) ?>">
@@ -106,12 +106,12 @@ $initials = strtoupper(substr($userName, 0, 1) . (strpos($userName, ' ') !== fal
         <button class="menu-toggle-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
             <i class="bi bi-list"></i>
         </button>
-       <?php $searchScope = $pageSearchScope ?? 'all'; ?>
-<form class="topbar-search" method="GET" action="../search/index.php" id="topbarSearchForm">
-    <i class="bi bi-search"></i>
-    <input type="hidden" name="scope" value="<?= htmlspecialchars($searchScope, ENT_QUOTES, 'UTF-8'); ?>">
-    <input type="text" name="q" id="topbarSearchInput" placeholder="Search anything..." value="<?= htmlspecialchars($_GET['q'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" autocomplete="off">
-</form>
+        <?php $searchScope = $pageSearchScope ?? 'all'; ?>
+        <form class="topbar-search" method="GET" action="../search/index.php" id="topbarSearchForm" autocomplete="off">
+            <i class="bi bi-search"></i>
+            <input type="hidden" name="scope" id="topbarSearchScope" value="<?= htmlspecialchars($searchScope, ENT_QUOTES, 'UTF-8'); ?>">
+            <input type="text" name="q" id="topbarSearchInput" placeholder="Search anything..." value="<?= htmlspecialchars($_GET['q'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" autocomplete="off">
+        </form>
         <div class="topbar-icons">
             <a href="../notifications/index.php" class="topbar-icon-btn">
                 <i class="bi bi-bell"></i>
@@ -132,3 +132,101 @@ $initials = strtoupper(substr($userName, 0, 1) . (strpos($userName, ' ') !== fal
 </div>
         </div>
     </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Live-search: types into the topbar box, filters the CURRENT page's own
+    // table in place. No dropdown, no popup — just the table you're already
+    // looking at, narrowed down to matches as you type.
+    //
+    // A module page opts in by wrapping its listing table in
+    // <div id="pageResultsContainer"> ... </div>, and (optionally) wrapping
+    // its pagination in <div id="pageResultsPagination"> ... </div>.
+    // Pages that haven't been wired up yet simply don't have this element,
+    // so typing does nothing live there — Enter still runs the full search.
+    //
+    // This has to wait for DOMContentLoaded: this script sits in sidebar.php,
+    // which is included near the TOP of every page, before the module's own
+    // table markup (output further down by e.g. departments/index.php) has
+    // even reached the browser yet. Without waiting, getElementById would
+    // always return null.
+
+    const input = document.getElementById('topbarSearchInput');
+    const scopeField = document.getElementById('topbarSearchScope');
+    const resultsContainer = document.getElementById('pageResultsContainer');
+    const paginationContainer = document.getElementById('pageResultsPagination');
+
+    if (!input || !resultsContainer) return;
+
+    resultsContainer.style.transition = 'opacity 0.1s ease';
+
+    const originalHTML = resultsContainer.innerHTML;
+    let debounceTimer = null;
+    let currentRequest = null;
+
+    function restoreOriginal() {
+        resultsContainer.innerHTML = originalHTML;
+        if (paginationContainer) {
+            paginationContainer.style.display = '';
+        }
+    }
+
+    function runSearch(query) {
+        if (currentRequest) currentRequest.abort();
+        const controller = new AbortController();
+        currentRequest = controller;
+
+        if (paginationContainer) {
+            paginationContainer.style.display = 'none';
+        }
+
+        resultsContainer.style.opacity = '0.5';
+
+        fetch('../search/live.php?q=' + encodeURIComponent(query) + '&scope=' + encodeURIComponent(scopeField.value), {
+            signal: controller.signal
+        })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                resultsContainer.style.opacity = '1';
+                if (data.empty) {
+                    resultsContainer.innerHTML = '<div class="text-center text-muted py-5">No matches found for "' + query + '".</div>';
+                } else {
+                    resultsContainer.innerHTML = data.html;
+                }
+            })
+            .catch(function (err) {
+                if (err.name !== 'AbortError') {
+                    resultsContainer.style.opacity = '1';
+                    resultsContainer.innerHTML = '<div class="text-center text-muted py-5">Search failed. Please try again.</div>';
+                }
+            });
+    }
+
+    input.addEventListener('input', function () {
+        const query = input.value.trim();
+        clearTimeout(debounceTimer);
+
+        if (query.length === 0) {
+            resultsContainer.style.opacity = '1';
+            restoreOriginal();
+            return;
+        }
+
+        // Fire almost immediately — just enough delay to avoid firing twice
+        // for the same keystroke, not enough to feel like a wait.
+        debounceTimer = setTimeout(function () {
+            runSearch(query);
+        }, 120);
+    });
+
+    // Live search already updates this table as you type, so there's no
+    // reason to send Enter off to the old separate "search everything" page
+    // (which isn't scoped to this module and can show unrelated matches).
+    const form = document.getElementById('topbarSearchForm');
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+        });
+    }
+});
+</script>

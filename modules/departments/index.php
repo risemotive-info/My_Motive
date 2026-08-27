@@ -49,7 +49,7 @@ while ($role = mysqli_fetch_assoc($rolesQuery)) {
 
 <div class="card border-0 shadow-sm">
 <div class="card-body p-0">
-<div style="overflow-x:auto;">
+<div style="overflow-x:auto;" id="pageResultsContainer">
 <table class="table table-bordered table-hover bg-white mb-0">
 <tr>
     <th>Name</th>
@@ -100,7 +100,9 @@ while ($role = mysqli_fetch_assoc($rolesQuery)) {
 <?php } ?>
 </table>
 </div>
+<div id="pageResultsPagination">
 <?php render_pagination($currentPage, $totalPages); ?>
+</div>
 </div>
 
 <?php include '../../includes/footer.php'; ?>
