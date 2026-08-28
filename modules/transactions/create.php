@@ -6,7 +6,6 @@ require '../../config/db.php';
 require '../../includes/notification_helper.php';
 
 $isAdmin = isset($_SESSION['user_role']) && strtolower($_SESSION['user_role']) === 'admin';
-$employees = mysqli_query($conn, 'SELECT id, names FROM users WHERE is_active = 1 ORDER BY names');
 
 if (isset($_POST['save'])) {
     $category = $_POST['category'] ?? '';
@@ -14,7 +13,7 @@ if (isset($_POST['save'])) {
     $amount = filter_input(INPUT_POST, 'amount', FILTER_VALIDATE_FLOAT);
     $transactionDate = $_POST['transaction_date'] ?? '';
     $description = trim($_POST['description'] ?? '');
-    $recordedBy = filter_input(INPUT_POST, 'recorded_by', FILTER_VALIDATE_INT) ?: null;
+    $recordedBy = $_SESSION['user_id'] ?? null;
     $validDate = DateTime::createFromFormat('Y-m-d', $transactionDate);
 
     if (!in_array($category, ['Product', 'Service'], true) || !in_array($type, ['Income', 'Expense'], true) || $amount === false || $amount <= 0 || !$validDate || $validDate->format('Y-m-d') !== $transactionDate) {
@@ -109,16 +108,6 @@ $modal_subtitle = $isAdmin ? 'Record a new income or expense entry.' : 'Submit a
                 <div class="mb-3">
                     <label class="form-label small fw-semibold text-muted">Description</label>
                     <textarea name="description" class="form-control rm-input" rows="4" style="height:auto;"><?= htmlspecialchars($description ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
-                </div>
-
-                <div class="mb-4">
-                    <label class="form-label small fw-semibold text-muted">Recorded By</label>
-                    <select name="recorded_by" class="form-select rm-input">
-                        <option value="">Not specified</option>
-                        <?php while ($employee = mysqli_fetch_assoc($employees)) { ?>
-                            <option value="<?= (int) $employee['id']; ?>" <?= isset($recordedBy) && $recordedBy === (int) $employee['id'] ? 'selected' : ''; ?>><?= htmlspecialchars($employee['names'], ENT_QUOTES, 'UTF-8'); ?></option>
-                        <?php } ?>
-                    </select>
                 </div>
 
                 <div class="d-grid gap-2 d-md-flex justify-content-end mt-4">
