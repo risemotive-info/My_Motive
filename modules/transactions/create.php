@@ -20,28 +20,31 @@ if (isset($_POST['save'])) {
     if (!in_array($category, ['Product', 'Service'], true) || !in_array($type, ['Income', 'Expense'], true) || $amount === false || $amount <= 0 || !$validDate || $validDate->format('Y-m-d') !== $transactionDate) {
         $error = 'Please provide a valid category, type, amount, and date.';
     } else {
-        $status = $isAdmin ? 'approved' : 'pending';
+        // Income is always auto-approved. Expenses need admin approval
+// unless the person recording it is already an admin.
+$status = ($isAdmin || $type === 'Income') ? 'approved' : 'pending';
 
         $statement = mysqli_prepare($conn, 'INSERT INTO transactions (category, transaction_type, amount, transaction_date, description, recorded_by, status) VALUES (?, ?, ?, ?, ?, ?, ?)');
         mysqli_stmt_bind_param($statement, 'ssdssis', $category, $type, $amount, $transactionDate, $description, $recordedBy, $status);
 
         if (mysqli_stmt_execute($statement)) {
-            if (!$isAdmin) {
-                $newId = mysqli_insert_id($conn);
-                $admins = mysqli_query($conn, "SELECT id FROM users WHERE role = 'admin' AND is_active = 1");
-                while ($admin = mysqli_fetch_assoc($admins)) {
-                    notifyUser(
-                        $conn,
-                        $admin['id'],
-                        'Transaction Approval Needed',
-                        'A new ' . strtolower($type) . ' of RWF ' . number_format($amount, 2) . ' is awaiting your approval (#' . $newId . ').'
-                    );
-                }
-                header('Location: index.php?success=Transaction submitted for admin approval.');
-            } else {
-                header('Location: index.php?success=Transaction recorded successfully.');
-            }
-            exit;
+    if ($status === 'pending') {
+        $newId = mysqli_insert_id($conn);
+        $admins = mysqli_query($conn, "SELECT id FROM users WHERE role = 'admin' AND is_active = 1");
+        while ($admin = mysqli_fetch_assoc($admins)) {
+            notifyUser(
+                $conn,
+                $admin['id'],
+                'Transaction Approval Needed',
+                'A new ' . strtolower($type) . ' of RWF ' . number_format($amount, 2) . ' is awaiting your approval (#' . $newId . ').'
+            );
+        }
+        header('Location: index.php?success=Transaction submitted for admin approval.');
+    } else {
+        header('Location: index.php?success=Transaction recorded successfully.');
+    }
+    exit;
+
         }
         $error = 'Unable to save the transaction.';
     }
@@ -67,11 +70,11 @@ $modal_subtitle = $isAdmin ? 'Record a new income or expense entry.' : 'Submit a
             <?php } ?>
 
             <?php if (!$isAdmin) { ?>
-            <div class="alert alert-info d-flex align-items-center gap-2 mb-3" style="border-radius:10px; border:none; font-size:13px; padding:10px 14px;">
-                <i class="bi bi-info-circle-fill"></i>
-                This transaction will be sent to an admin for approval before it appears in totals.
-            </div>
-            <?php } ?>
+<div class="alert alert-info d-flex align-items-center gap-2 mb-3" style="border-radius:10px; border:none; font-size:13px; padding:10px 14px;">
+    <i class="bi bi-info-circle-fill"></i>
+    Income is recorded right away. Expenses are sent to an admin for approval before they appear in totals.
+</div>
+<?php } ?>
 
             <form method="POST">
                 <div class="mb-3">
