@@ -27,6 +27,7 @@ $customers = mysqli_query($conn, "SELECT customers.*, COALESCE(SUM(CASE WHEN sal
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
         <div id="pageResultsContainer">
+        <div class="table-responsive">
         <table class="table table-bordered table-hover bg-white mb-0">
 <tr>
     <th>Name</th>
@@ -49,6 +50,7 @@ $customers = mysqli_query($conn, "SELECT customers.*, COALESCE(SUM(CASE WHEN sal
 </tr>
 <?php } ?>
 </table>
+        </div>
         </div>
         <div id="pageResultsPagination">
         <?php render_pagination($currentPage, $totalPages); ?>
