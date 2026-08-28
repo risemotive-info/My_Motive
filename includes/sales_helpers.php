@@ -49,7 +49,7 @@ function sales_finalize($conn, $saleId) {
     $category = $hasProduct ? 'Product' : 'Service';
 
     $description = 'Sale #' . $saleId . ' (' . $sale['payment_method'] . ')';
-    $transactionStatement = mysqli_prepare($conn, "INSERT INTO transactions (category, transaction_type, amount, transaction_date, description, recorded_by) VALUES (?, 'Income', ?, ?, ?, ?)");
+    $transactionStatement = mysqli_prepare($conn, "INSERT INTO transactions (category, transaction_type, amount, transaction_date, description, recorded_by, status) VALUES (?, 'Income', ?, ?, ?, ?, 'approved')");
     mysqli_stmt_bind_param($transactionStatement, 'sdssi', $category, $sale['total_amount'], $sale['sale_date'], $description, $sale['recorded_by']);
     mysqli_stmt_execute($transactionStatement);
     $transactionId = mysqli_insert_id($conn);
