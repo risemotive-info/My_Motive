@@ -33,16 +33,21 @@ $customers = mysqli_query($conn, "SELECT customers.*, COALESCE(SUM(CASE WHEN sal
     <th>Name</th>
     <th>Phone</th>
     <th>Email</th>
+    <th>Location</th>
     <th>Outstanding Balance</th>
     <th>Action</th>
 </tr>
 <?php if (mysqli_num_rows($customers) === 0) { ?>
-<tr><td colspan="5" class="text-center text-muted py-4">No customers yet.</td></tr><?php } ?>
+<tr><td colspan="6" class="text-center text-muted py-4">No customers yet.</td></tr><?php } ?>
 <?php while ($customer = mysqli_fetch_assoc($customers)) { ?>
 <tr>
     <td><?= htmlspecialchars($customer['name'], ENT_QUOTES, 'UTF-8'); ?></td>
     <td><?= htmlspecialchars($customer['phone'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
     <td><?= htmlspecialchars($customer['email'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
+    <td><?php
+        $locationParts = array_filter([$customer['sector'] ?? '', $customer['district'] ?? '', $customer['province'] ?? '']);
+        echo $locationParts ? htmlspecialchars(implode(', ', $locationParts), ENT_QUOTES, 'UTF-8') : '<span class="text-muted">—</span>';
+    ?></td>
     <td><?php if ($customer['balance'] > 0) { ?>
     <span class="text-danger fw-semibold">RWF <?= number_format($customer['balance'], 2); ?></span>
     <?php } else { ?><span class="text-muted">RWF 0.00</span><?php } ?></td>
