@@ -132,23 +132,50 @@ if (isset($_POST['save'])) {
                 - $calc['attendance_deduction'];
             $paidAt = $status === 'Paid' ? date('Y-m-d H:i:s') : null;
 
-            $statement = mysqli_prepare($conn, "INSERT INTO payroll
-                (user_id, pay_period, basic_salary, present_days, absent_days, overtime_minutes,
-                 attendance_deduction, overtime_pay, avg_performance_score, performance_bonus,
-                 sales_commission, bonus, deductions, net_salary, status, paid_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            mysqli_stmt_bind_param(
-                $statement, 'isdiiiddddddddss',
-                $userId, $periodDate, $calc['basic_salary'], $calc['present_days'], $calc['absent_days'], $calc['overtime_minutes'],
-                $calc['attendance_deduction'], $calc['overtime_pay'], $calc['avg_performance_score'], $calc['performance_bonus'],
-                $salesCommission, $bonus, $deductions, $netSalary, $status, $paidAt
-            );
+            mysqli_begin_transaction($conn);
+            try {
+                $statement = mysqli_prepare($conn, "INSERT INTO payroll
+                    (user_id, pay_period, basic_salary, present_days, absent_days, overtime_minutes,
+                     attendance_deduction, overtime_pay, avg_performance_score, performance_bonus,
+                     sales_commission, bonus, deductions, net_salary, status, paid_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                mysqli_stmt_bind_param(
+                    $statement, 'isdiiiddddddddss',
+                    $userId, $periodDate, $calc['basic_salary'], $calc['present_days'], $calc['absent_days'], $calc['overtime_minutes'],
+                    $calc['attendance_deduction'], $calc['overtime_pay'], $calc['avg_performance_score'], $calc['performance_bonus'],
+                    $salesCommission, $bonus, $deductions, $netSalary, $status, $paidAt
+                );
+                mysqli_stmt_execute($statement);
 
-            if (mysqli_stmt_execute($statement)) {
+                // Auto-post the payment to Transactions as an Expense — only for
+                // 'Paid' runs, since a Draft hasn't actually paid anyone yet.
+                // No approval needed — mirrors how sales_finalize() posts income
+                // for Sales, so it appears in Transactions immediately.
+                if ($status === 'Paid') {
+                    $nameStatement = mysqli_prepare($conn, 'SELECT names FROM users WHERE id = ?');
+                    mysqli_stmt_bind_param($nameStatement, 'i', $userId);
+                    mysqli_stmt_execute($nameStatement);
+                    $employeeRow = mysqli_fetch_assoc(mysqli_stmt_get_result($nameStatement));
+                    $employeeName = $employeeRow['names'] ?? ('Employee #' . $userId);
+
+                    $adminId = $_SESSION['user_id'] ?? null;
+                    $paidDate = date('Y-m-d');
+                    $description = 'Payroll: ' . $employeeName . ' (' . date('F Y', strtotime($periodDate)) . ')';
+
+                    $insertTransaction = mysqli_prepare($conn, "INSERT INTO transactions
+                        (category, transaction_type, amount, transaction_date, description, recorded_by, status)
+                        VALUES ('Payroll', 'Expense', ?, ?, ?, ?, 'approved')");
+                    mysqli_stmt_bind_param($insertTransaction, 'dssi', $netSalary, $paidDate, $description, $adminId);
+                    mysqli_stmt_execute($insertTransaction);
+                }
+
+                mysqli_commit($conn);
                 header('Location: index.php?success=Payroll generated successfully.');
                 exit;
+            } catch (Exception $e) {
+                mysqli_rollback($conn);
+                $error = 'Unable to generate payroll. Please try again.';
             }
-            $error = 'Unable to generate payroll. Please try again.';
             }
         }
     }

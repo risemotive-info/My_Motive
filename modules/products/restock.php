@@ -43,6 +43,18 @@ if (isset($_POST['save'])) {
             mysqli_stmt_bind_param($updateStock, 'ii', $quantity, $id);
             mysqli_stmt_execute($updateStock);
 
+            // Auto-post the restock cost to Transactions as an Expense.
+            // No approval needed — mirrors how sales_finalize() posts income
+            // for Sales, so it appears in Transactions immediately.
+            $totalCost = $quantity * $unitCost;
+            $description = 'Restock: ' . $quantity . ' x ' . $product['product_name']
+                . ($supplier !== '' ? ' from ' . $supplier : '');
+            $insertTransaction = mysqli_prepare($conn, "INSERT INTO transactions
+                (category, transaction_type, amount, transaction_date, description, recorded_by, status)
+                VALUES ('Purchase (Re-stock)', 'Expense', ?, ?, ?, ?, 'approved')");
+            mysqli_stmt_bind_param($insertTransaction, 'dssi', $totalCost, $purchaseDate, $description, $recordedBy);
+            mysqli_stmt_execute($insertTransaction);
+
             mysqli_commit($conn);
             header('Location: index.php?success=' . urlencode($quantity . ' units added to ' . $product['product_name'] . '.'));
             exit;
