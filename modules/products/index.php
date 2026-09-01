@@ -19,6 +19,12 @@ $offset = ($currentPage - 1) * PER_PAGE;
 
 $result = mysqli_query($conn, "SELECT * FROM products ORDER BY item_type, product_name ASC LIMIT " . PER_PAGE . " OFFSET " . $offset);
 $lowStockCount = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM products WHERE item_type = 'Item' AND quantity <= " . LOW_STOCK_THRESHOLD . " AND is_active = 1"))['c'];
+
+// Total value of current stock, based on Buying Price. Only active, physical
+// Items carry stock — Services are excluded since they have no quantity.
+$stockValueRow = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(quantity * buying_price), 0) AS stock_value
+    FROM products WHERE item_type = 'Item' AND is_active = 1"));
+$totalStockValue = (float) $stockValueRow['stock_value'];
 ?>
 
 <?php if (isset($_GET['success'])) { ?>
@@ -35,6 +41,18 @@ $lowStockCount = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FR
         <?php if ($isAdmin) { ?>
         <a href="create.php" class="rm-btn rm-btn-primary">+ Add Item or Service</a>
         <?php } ?>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card border-primary">
+            <div class="card-body">
+                <small class="text-muted">Total Stock Value</small>
+                <h4 class="text-primary mb-0">RWF <?= number_format($totalStockValue, 2); ?></h4>
+                <small class="text-muted">Based on Buying Price of active items in stock</small>
+            </div>
+        </div>
     </div>
 </div>
 
