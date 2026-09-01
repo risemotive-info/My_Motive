@@ -7,7 +7,7 @@ use Mpdf\Mpdf;
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 if (!$id) { header('Location: index.php?success=Invalid invoice requested.'); exit; }
 
-$statement = mysqli_prepare($conn, 'SELECT sales.*, customers.name AS customer_name, customers.phone AS customer_phone, customers.email AS customer_email, customers.address AS customer_address, customers.province AS customer_province, customers.district AS customer_district, customers.sector AS customer_sector, users.names AS recorded_by_name, users.role AS recorded_by_role, users.phone AS recorded_by_phone
+$statement = mysqli_prepare($conn, 'SELECT sales.*, customers.name AS customer_name, customers.phone AS customer_phone, customers.email AS customer_email, customers.address AS customer_address, customers.province AS customer_province, customers.district AS customer_district, customers.sector AS customer_sector, customers.loyalty_points AS customer_loyalty_points, users.names AS recorded_by_name, users.role AS recorded_by_role, users.phone AS recorded_by_phone
     FROM sales
     LEFT JOIN customers ON sales.customer_id = customers.id
     LEFT JOIN users ON sales.recorded_by = users.id
@@ -30,6 +30,13 @@ $items = mysqli_stmt_get_result($itemsStatement);
 
 $isPending = $sale['status'] === 'Pending Discount Approval';
 $isCancelled = $sale['status'] === 'Cancelled';
+$showLoyalty = !$isPending && !$isCancelled && $sale['customer_id'];
+
+// Payment methods accepted for outstanding balances — shown on invoices that
+// still have money owed (Credit / Partially Paid), plus draft invoices so
+// the customer knows how to pay once approved.
+$outstandingBalance = (float) $sale['total_amount'] - (float) $sale['amount_paid'];
+$showPaymentMethods = !$isCancelled && ($isPending || $outstandingBalance > 0.01);
 
 function money($v) { return number_format((float) $v, 2); }
 
@@ -51,7 +58,7 @@ $headerHtml = '
     <td style="width:60%; vertical-align:top;">
       <img src="' . $logoPath . '" width="34" height="34" style="vertical-align:middle;"> 
       <span style="font-size:15px; font-weight:700; color:#1E2333;">RISE MOTIVE</span><br>
-      <span style="font-size:8px; color:#8A90A3;">TIN Number:122923513 &nbsp; website: www.risemotive.rw<br>Kicukiro District, Kigali, Rwanda</span>
+      <span style="font-size:8px; color:#8A90A3;">TIN Number:122923513 &nbsp;<br>website: www.risemotive.rw<br>Kicukiro District, Kigali, Rwanda</span>
     </td>
     <td style="width:40%; text-align:right; vertical-align:top;">
       <span style="font-size:14px; font-weight:700; color:#1E2333;">' . htmlspecialchars($docTitle, ENT_QUOTES, 'UTF-8') . '</span><br>
@@ -93,6 +100,13 @@ ob_start();
   .sig-sub { color:#8A90A3; font-weight:600; margin-bottom:6px; }
   .sig-label { color:#8A90A3; display:inline-block; width:60px; }
   .footnote { margin-top:12px; font-size:9px; color:#8A90A3; }
+  .loyalty-block { margin-bottom:14px; padding:8px 10px; background:#F0F4FF; border:1px solid #D8E0FA; border-radius:6px; font-size:10px; }
+  .loyalty-block .label { color:#8A90A3; width:120px; display:inline-block; }
+  .payment-methods { margin-top:16px; padding:10px 12px; border:1px solid #E4E8F2; border-radius:6px; font-size:10px; }
+  .payment-methods .pm-heading { font-size:11px; font-weight:800; margin-bottom:8px; }
+  .payment-methods .pm-option { font-weight:700; margin:8px 0 3px; }
+  .payment-methods .pm-detail { margin-left:14px; color:#1E2333; }
+  .payment-methods .pm-detail .pm-label { color:#8A90A3; }
 </style>
 
 <?php if ($isPending) { ?>
@@ -103,22 +117,30 @@ ob_start();
 
 <table class="info-grid">
   <tr>
-    <td width="50%"><span class="label">Customer</span><?= htmlspecialchars($sale['customer_name'] ?? 'Walk-in Customer', ENT_QUOTES, 'UTF-8'); ?></td>
-    <td width="50%"><span class="label">Date</span><?= date('d M Y', strtotime($sale['sale_date'])); ?></td>
+    <td width="50%"><span class="label">Customer:</span><?= htmlspecialchars($sale['customer_name'] ?? 'Walk-in Customer', ENT_QUOTES, 'UTF-8'); ?></td>
+    <td width="50%"><span class="label">Date:</span><?= date('d M Y', strtotime($sale['sale_date'])); ?></td>
   </tr>
   <tr>
-    <td><span class="label">Phone</span><?= htmlspecialchars($sale['customer_phone'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
-    <td><span class="label">Payment Method</span><?= htmlspecialchars($sale['payment_method'], ENT_QUOTES, 'UTF-8'); ?></td>
+    <td><span class="label">Phone:</span><?= htmlspecialchars($sale['customer_phone'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
+    <td><span class="label">Payment Method:</span><?= htmlspecialchars($sale['payment_method'], ENT_QUOTES, 'UTF-8'); ?></td>
   </tr>
   <tr>
-    <td><span class="label">Location</span><?= $customerLocation ? htmlspecialchars($customerLocation, ENT_QUOTES, 'UTF-8') : '—'; ?></td>
-    <td><span class="label">Served By</span><?= htmlspecialchars($sale['recorded_by_name'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
+    <td><span class="label">Location:</span><?= $customerLocation ? htmlspecialchars($customerLocation, ENT_QUOTES, 'UTF-8') : '—'; ?></td>
+    <td><span class="label">Served By:</span><?= htmlspecialchars($sale['recorded_by_name'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
   </tr>
   <tr>
-    <td><span class="label">Amount Paid</span>RWF <?= money($sale['amount_paid']); ?></td>
+    <td><span class="label">Amount Paid:</span>RWF <?= money($sale['amount_paid']); ?></td>
     <td></td>
   </tr>
 </table>
+
+<?php if ($showLoyalty) { ?>
+<div class="loyalty-block">
+  <span class="label">Points Earned</span><strong><?= (int) ($sale['loyalty_points_earned'] ?? 0); ?></strong>
+  &nbsp;&nbsp;&nbsp;
+  <span class="label">Total Loyalty Points</span><strong><?= (int) ($sale['customer_loyalty_points'] ?? 0); ?></strong>
+</div>
+<?php } ?>
 
 <table class="items">
   <thead>
@@ -148,6 +170,20 @@ ob_start();
   <tr class="grand"><td>Total</td><td class="val">RWF <?= money($sale['total_amount']); ?></td></tr>
 </table>
 
+<?php if ($showPaymentMethods) { ?>
+<div class="payment-methods">
+  <div class="pm-heading">ACCEPTED PAYMENT METHODS</div>
+
+  <div class="pm-option">1. Bank Transfer &ndash; EQUITY BANK</div>
+  <div class="pm-detail"><span class="pm-label">Account No:</span> <strong>4020201146022</strong></div>
+  <div class="pm-detail"><span class="pm-label">Account Name:</span> <strong>RISE MOTIVE Ltd</strong></div>
+
+  <div class="pm-option">2. MTN-MoMo Code</div>
+  <div class="pm-detail"><span class="pm-label">MoMo Code:</span> <strong>070600</strong></div>
+  <div class="pm-detail"><span class="pm-label">Account Name:</span> <strong>RISE MOTIVE Ltd</strong></div>
+</div>
+<?php } ?>
+
 <?php if (!$isPending && !$isCancelled) { ?>
 <div class="sig-block">
   <div class="sig-heading">For RISE MOTIVE</div>
@@ -160,7 +196,7 @@ ob_start();
 
 <div class="footnote">
   <?php if ($isPending) { ?>
-    This is a draft invoice. The discount on this sale is awaiting manager approval — stock and finance have not been updated yet.
+    This is a draft invoice. This sale is awaiting manager approval — stock and finance have not been updated yet.
   <?php } elseif ($isCancelled) { ?>
     This sale was cancelled and was not applied to inventory or finance records.
   <?php } else { ?>

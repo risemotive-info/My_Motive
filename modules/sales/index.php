@@ -33,6 +33,17 @@ function sale_status_badge($status) {
     $class = $map[$status] ?? 'secondary';
     return '<span class="badge bg-' . $class . '">' . htmlspecialchars($status, ENT_QUOTES, 'UTF-8') . '</span>';
 }
+
+function sale_pending_reason_badges($row) {
+    $badges = [];
+    if ((float) $row['discount_amount'] > 0) {
+        $badges[] = '<span class="badge bg-info text-dark me-1">Discount</span>';
+    }
+    if (!empty($row['needs_credit_approval'])) {
+        $badges[] = '<span class="badge bg-danger me-1">Credit &lt; 500 pts</span>';
+    }
+    return $badges ? implode('', $badges) : '<span class="text-muted">—</span>';
+}
 ?>
 <?php if (isset($_GET['success'])) { ?>
 <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -51,7 +62,7 @@ function sale_status_badge($status) {
 
 <?php if ($pending && mysqli_num_rows($pending) > 0) { ?>
 <div class="card border-0 shadow-sm mb-4">
-    <div class="card-header bg-white"><h5 class="mb-0">Awaiting Discount Approval</h5></div>
+    <div class="card-header bg-white"><h5 class="mb-0">Awaiting Approval</h5></div>
     <?php
 $cancelRequests = null;
 if (in_array($role, ['Manager', 'Admin'], true)) {
@@ -83,12 +94,13 @@ if (in_array($role, ['Manager', 'Admin'], true)) {
 <?php } ?>
     <div class="card-body p-0">
         <table class="table table-bordered table-hover bg-white mb-0">
-            <tr><th>Date</th><th>Customer</th><th>Requested By</th><th>Discount</th><th>Total</th><th>Action</th></tr>
+            <tr><th>Date</th><th>Customer</th><th>Requested By</th><th>Reason</th><th>Discount</th><th>Total</th><th>Action</th></tr>
             <?php while ($row = mysqli_fetch_assoc($pending)) { ?>
             <tr>
                 <td><?= date('d M Y', strtotime($row['sale_date'])); ?></td>
                 <td><?= htmlspecialchars($row['customer_name'] ?? 'Walk-in', ENT_QUOTES, 'UTF-8'); ?></td>
                 <td><?= htmlspecialchars($row['requested_by_name'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?= sale_pending_reason_badges($row); ?></td>
                 <td>RWF <?= number_format($row['discount_amount'], 2); ?></td>
                 <td>RWF <?= number_format($row['total_amount'], 2); ?></td>
                 <td><a href="approve_discount.php?id=<?= (int) $row['id']; ?>" class="btn btn-primary btn-sm">Review</a></td>

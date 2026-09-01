@@ -72,20 +72,36 @@ if (isset($_POST['save'])) {
             $userId = current_user_id();
             $role = current_user_role();
 
-            $needsApproval = $discountAmount > 0 && $role === 'Employee';
+            $needsDiscountApproval = $discountAmount > 0 && $role === 'Employee';
+
+            // Automatic Credit Eligibility: customers with fewer than 500
+            // Loyalty Points cannot complete a Credit sale without
+            // Manager/Admin approval (see approve_discount.php).
+            $needsCreditApproval = false;
+            if ($paymentMethod === 'Credit' && $customerId) {
+                $customerPointsStatement = mysqli_prepare($conn, 'SELECT loyalty_points FROM customers WHERE id = ?');
+                mysqli_stmt_bind_param($customerPointsStatement, 'i', $customerId);
+                mysqli_stmt_execute($customerPointsStatement);
+                $customerPointsRow = mysqli_fetch_assoc(mysqli_stmt_get_result($customerPointsStatement));
+                $customerLoyaltyPoints = $customerPointsRow ? (int) $customerPointsRow['loyalty_points'] : 0;
+                $needsCreditApproval = customer_credit_status($customerLoyaltyPoints) === 'Not Allowed';
+            }
+
+            $needsApproval = $needsDiscountApproval || $needsCreditApproval;
             $status = $needsApproval ? 'Pending Discount Approval' : sales_compute_status($amountPaidInput, $totalAmount);
             $discountRequestedBy = $discountAmount > 0 ? $userId : null;
             $discountApprovedBy = ($discountAmount > 0 && !$needsApproval) ? $userId : null;
             $discountApprovedAt = ($discountAmount > 0 && !$needsApproval) ? date('Y-m-d H:i:s') : null;
+            $needsCreditApprovalInt = (int) $needsCreditApproval;
 
             mysqli_begin_transaction($conn);
 
             $saleStatement = mysqli_prepare($conn, 'INSERT INTO sales
-                (customer_id, sale_date, subtotal, discount_amount, total_amount, amount_paid, payment_method, status, discount_requested_by, discount_approved_by, discount_approved_at, recorded_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-            mysqli_stmt_bind_param($saleStatement, 'isddddssiisi',
+                (customer_id, sale_date, subtotal, discount_amount, total_amount, amount_paid, payment_method, status, discount_requested_by, discount_approved_by, discount_approved_at, recorded_by, needs_credit_approval)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            mysqli_stmt_bind_param($saleStatement, 'isddddssiisii',
                 $customerId, $saleDate, $subtotal, $discountAmount, $totalAmount, $amountPaidInput, $paymentMethod, $status,
-                $discountRequestedBy, $discountApprovedBy, $discountApprovedAt, $userId);
+                $discountRequestedBy, $discountApprovedBy, $discountApprovedAt, $userId, $needsCreditApprovalInt);
             mysqli_stmt_execute($saleStatement);
             $saleId = mysqli_insert_id($conn);
 
@@ -101,7 +117,18 @@ if (isset($_POST['save'])) {
 
             mysqli_commit($conn);
 
-            header('Location: invoice.php?id=' . $saleId . '&success=' . ($needsApproval ? 'Sale saved. Waiting for manager approval of the discount before invoicing.' : 'Sale recorded successfully.'));
+            $successMessage = 'Sale recorded successfully.';
+            if ($needsApproval) {
+                if ($needsDiscountApproval && $needsCreditApproval) {
+                    $successMessage = 'Sale saved. Waiting for manager approval — this customer has fewer than 500 Loyalty Points and a discount was requested.';
+                } elseif ($needsCreditApproval) {
+                    $successMessage = 'Sale saved. This customer has fewer than 500 Loyalty Points, so the Credit sale needs manager approval before it is completed.';
+                } else {
+                    $successMessage = 'Sale saved. Waiting for manager approval of the discount before invoicing.';
+                }
+            }
+
+            header('Location: invoice.php?id=' . $saleId . '&success=' . urlencode($successMessage));
             exit;
         }
     }

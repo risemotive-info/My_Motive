@@ -1,5 +1,6 @@
 <?php
 require '../../config/db.php';
+require '../../includes/sales_helpers.php'; // for customer_credit_status()
 $pageSearchScope = 'customers'; // tells the topbar search what module we're in
 require '../../includes/pagination.php';
 include '../../includes/header.php';
@@ -35,11 +36,16 @@ $customers = mysqli_query($conn, "SELECT customers.*, COALESCE(SUM(CASE WHEN sal
     <th>Email</th>
     <th>Location</th>
     <th>Outstanding Balance</th>
+    <th>Loyalty Points</th>
+    <th>Credit Status</th>
     <th>Action</th>
 </tr>
 <?php if (mysqli_num_rows($customers) === 0) { ?>
-<tr><td colspan="6" class="text-center text-muted py-4">No customers yet.</td></tr><?php } ?>
-<?php while ($customer = mysqli_fetch_assoc($customers)) { ?>
+<tr><td colspan="8" class="text-center text-muted py-4">No customers yet.</td></tr><?php } ?>
+<?php while ($customer = mysqli_fetch_assoc($customers)) {
+    $loyaltyPoints = (int) $customer['loyalty_points'];
+    $creditStatus = customer_credit_status($loyaltyPoints);
+?>
 <tr>
     <td><?= htmlspecialchars($customer['name'], ENT_QUOTES, 'UTF-8'); ?></td>
     <td><?= htmlspecialchars($customer['phone'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
@@ -51,6 +57,10 @@ $customers = mysqli_query($conn, "SELECT customers.*, COALESCE(SUM(CASE WHEN sal
     <td><?php if ($customer['balance'] > 0) { ?>
     <span class="text-danger fw-semibold">RWF <?= number_format($customer['balance'], 2); ?></span>
     <?php } else { ?><span class="text-muted">RWF 0.00</span><?php } ?></td>
+    <td><span class="fw-semibold"><?= $loyaltyPoints; ?></span></td>
+    <td>
+        <span class="badge bg-<?= $creditStatus === 'Allowed' ? 'success' : 'danger'; ?>"><?= $creditStatus; ?></span>
+    </td>
     <td><a href="edit.php?id=<?= (int) $customer['id']; ?>" class="rm-btn rm-btn-warning rm-btn-sm">Edit</a></td>
 </tr>
 <?php } ?>

@@ -26,6 +26,21 @@ $offset = ($currentPage - 1) * PER_PAGE;
 $summary = mysqli_query($conn, "SELECT COALESCE(SUM(CASE WHEN transaction_type = 'Income' THEN amount ELSE 0 END), 0) AS income, COALESCE(SUM(CASE WHEN transaction_type = 'Expense' THEN amount ELSE 0 END), 0) AS expense FROM transactions WHERE status = 'approved'");
 $totals = mysqli_fetch_assoc($summary);
 
+// Profit Overview: Product profit = Selling - Buying price per unit sold;
+// Service profit = 80% of amount paid. Only counts sales that actually
+// completed (excludes still-pending and cancelled sales).
+$profitSummary = mysqli_query($conn, "SELECT
+        COALESCE(SUM(CASE WHEN sale_items.item_type = 'Product' THEN (sale_items.unit_price - COALESCE(products.buying_price, 0)) * sale_items.quantity ELSE 0 END), 0) AS product_profit,
+        COALESCE(SUM(CASE WHEN sale_items.item_type = 'Service' THEN 0.8 * sale_items.line_total ELSE 0 END), 0) AS service_profit
+    FROM sale_items
+    JOIN sales ON sale_items.sale_id = sales.id
+    LEFT JOIN products ON sale_items.product_id = products.id
+    WHERE sales.status NOT IN ('Pending Discount Approval', 'Cancelled')");
+$profitTotals = mysqli_fetch_assoc($profitSummary);
+$productProfit = (float) $profitTotals['product_profit'];
+$serviceProfit = (float) $profitTotals['service_profit'];
+$totalProfit = $productProfit + $serviceProfit;
+
 $sql = "SELECT transactions.*, users.names AS recorder_name FROM transactions LEFT JOIN users ON transactions.recorded_by = users.id WHERE $visibilityWhere ORDER BY transaction_date DESC, transactions.id DESC LIMIT " . PER_PAGE . ' OFFSET ' . $offset;
 $transactions = mysqli_query($conn, $sql);
 
@@ -72,6 +87,37 @@ $statusBadge = [
         </div>
     </div>
 </div>
+
+<h5 class="mb-3">Profit Overview</h5>
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card border-info">
+            <div class="card-body">
+                <small class="text-muted">Product Profit</small>
+                <h4 class="text-info mb-0">RWF <?= number_format($productProfit, 2); ?></h4>
+                <small class="text-muted">Selling Price − Buying Price</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-warning">
+            <div class="card-body">
+                <small class="text-muted">Service Profit</small>
+                <h4 class="text-warning mb-0">RWF <?= number_format($serviceProfit, 2); ?></h4>
+                <small class="text-muted">80% of amount paid for services</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-primary">
+            <div class="card-body">
+                <small class="text-muted">Total Profit</small>
+                <h4 class="text-primary mb-0">RWF <?= number_format($totalProfit, 2); ?></h4>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
         <!-- Live-search wires up against this container: it caches this exact
