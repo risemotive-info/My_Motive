@@ -100,6 +100,9 @@ ob_start();
   .footnote { margin-top:12px; font-size:9px; color:#8A90A3; }
   .loyalty-block { margin-bottom:14px; padding:8px 10px; background:#F0F4FF; border:1px solid #D8E0FA; border-radius:6px; font-size:10px; }
   .loyalty-block .label { color:#8A90A3; width:120px; display:inline-block; }
+  .loyalty-block table { width:100%; }
+  .loyalty-block td { padding:0; }
+ .loyalty-block td.right { text-align:right; }
   .info-box { margin-top:16px; padding:10px 12px; border:1px solid #E4E8F2; border-radius:6px; font-size:10px; }
   .info-box table.cols { width:100%; border-collapse:collapse; }
   .info-box table.cols td { vertical-align:top; padding:0; }
@@ -140,9 +143,12 @@ ob_start();
 
 <?php if ($showLoyalty) { ?>
 <div class="loyalty-block">
-  <span class="label"><strong>Points Earned:&nbsp;</strong></span><strong><?= (int) ($sale['loyalty_points_earned'] ?? 0); ?></strong>
-  &nbsp;&nbsp;&nbsp;
-  <span class="label"><strong>Total Loyalty Points:&nbsp;</strong></span><strong><?= (int) ($sale['customer_loyalty_points'] ?? 0); ?></strong>
+  <table>
+    <tr>
+      <td><span class="label"><strong>Points Earned:&nbsp;</strong></span><strong><?= (int) ($sale['loyalty_points_earned'] ?? 0); ?></strong></td>
+      <td class="right"><span class="label"><strong>Total Loyalty Points:&nbsp;</strong></span><strong><?= (int) ($sale['customer_loyalty_points'] ?? 0); ?></strong></td>
+    </tr>
+  </table>
 </div>
 <?php } ?>
 
