@@ -188,13 +188,12 @@ ob_start();
 <?php if ($showPaymentMethods) { ?>
   <div class="pm-heading"><strong>ACCEPTED PAYMENT METHODS</strong></div>
 
-  <div class="pm-option">1. Bank Transfer &ndash; EQUITY BANK</div>
+  <div class="pm-option">Bank Transfer &ndash; EQUITY BANK</div>
   <div class="pm-detail"><span class="pm-label">Account No:</span> <strong>4020201146022</strong></div>
-  <div class="pm-detail"><span class="pm-label">Account Name:</span> <strong>RISE MOTIVE Ltd</strong></div>
 
-  <div class="pm-option">2. MTN-MoMo Code</div>
+  <div class="pm-option">MTN-MoMo Code</div>
   <div class="pm-detail"><span class="pm-label">MoMo Code:</span> <strong>070600</strong></div>
-  <div class="pm-detail"><span class="pm-label">Account Name:</span> <strong>RISE MOTIVE Ltd</strong></div>
+  <div class="pm-detail"><span class="pm-label">Account Names:</span> <strong>RISE MOTIVE Ltd</strong></div>
 <?php } ?>
 </td>
 <td class="col-right">
@@ -217,7 +216,7 @@ ob_start();
   <?php } elseif ($isCancelled) { ?>
     This sale was cancelled and was not applied to inventory or finance records.
   <?php } else { ?>
-    Thank you for your business.
+    Rise Beyond Limits!
   <?php } ?>
 </div>
 <?php
