@@ -32,11 +32,8 @@ $isPending = $sale['status'] === 'Pending Discount Approval';
 $isCancelled = $sale['status'] === 'Cancelled';
 $showLoyalty = !$isPending && !$isCancelled && $sale['customer_id'];
 
-// Payment methods accepted for outstanding balances — shown on invoices that
-// still have money owed (Credit / Partially Paid), plus draft invoices so
-// the customer knows how to pay once approved.
-$outstandingBalance = (float) $sale['total_amount'] - (float) $sale['amount_paid'];
-$showPaymentMethods = !$isCancelled && ($isPending || $outstandingBalance > 0.01);
+// Payment methods are shown on every non-cancelled sale.
+$showPaymentMethods = !$isCancelled;
 
 function money($v) { return number_format((float) $v, 2); }
 
@@ -44,21 +41,27 @@ $customerLocationParts = array_filter([$sale['customer_sector'] ?? '', $sale['cu
 $customerLocation = $customerLocationParts ? implode(', ', $customerLocationParts) : null;
 
 $docTitle = $isPending ? 'Draft Invoice' : (($sale['status'] === 'Credit' || $sale['payment_method'] === 'Credit') ? 'Invoice' : 'Receipt');
-$docNumber = 'No. ' . str_pad($sale['id'], 6, '0', STR_PAD_LEFT);
+$docNumber = 'No. RM' . str_pad($sale['id'], 6, '0', STR_PAD_LEFT);
 $statusLabel = htmlspecialchars($sale['status'], ENT_QUOTES, 'UTF-8');
 $statusColor = $isPending ? '#B8860B' : ($isCancelled ? '#8A90A3' : ($sale['status'] === 'Credit' ? '#E24B4A' : '#0FA968'));
 $statusBg    = $isPending ? '#FDF3E3' : ($isCancelled ? '#F1F3F9' : ($sale['status'] === 'Credit' ? '#FCE9E9' : '#E1F7EE'));
 
-$logoPath = __DIR__ . '/../../assets/images/logo.jpg';
+$logoPath = __DIR__ . '/../../assets/images/rise.jpg';
 
 // ---- Repeating header (no URL, ever — this is entirely our own HTML) ----
 $headerHtml = '
 <table width="100%" style="border-bottom:2px solid #1E2333; padding-bottom:6px;">
   <tr>
     <td style="width:60%; vertical-align:top;">
-      <img src="' . $logoPath . '" width="34" height="34" style="vertical-align:middle;"> 
-      <span style="font-size:15px; font-weight:700; color:#1E2333;">RISE MOTIVE</span><br>
-      <span style="font-size:8px; color:#8A90A3;">TIN Number:122923513 &nbsp;<br>website: www.risemotive.rw<br>Kicukiro District, Kigali, Rwanda</span>
+      <table cellpadding="0" cellspacing="0" width="100%">
+       <tr><td><img src="' . $logoPath . '" style="height:70px; width:auto;"></td></tr>
+         <tr><td style="padding-top:8px;">
+          <span style="font-size:24px; font-weight:900; color:#000000; letter-spacing:0.5px;">RISE MOTIVE</span><br>
+           <span style="font-size:10px; font-weight:700; color:#1E2333; margin-top:8px; display:inline-block;">TIN Number:122923513</span><br>
+           <span style="font-size:10px; font-weight:700; color:#1E2333; margin-top:8px; display:inline-block;">Website: www.risemotive.rw</span><br>
+           <span style="font-size:10px; font-weight:700; color:#1E2333; margin-top:8px; display:inline-block;">Kicukiro District, Kigali, Rwanda</span>
+           </td></tr>
+      </table>
     </td>
     <td style="width:40%; text-align:right; vertical-align:top;">
       <span style="font-size:14px; font-weight:700; color:#1E2333;">' . htmlspecialchars($docTitle, ENT_QUOTES, 'UTF-8') . '</span><br>
@@ -67,7 +70,6 @@ $headerHtml = '
     </td>
   </tr>
 </table>';
-
 // ---- Repeating footer: page number only, no URL, no date-stamp strip ----
 $footerHtml = '
 <table width="100%" style="border-top:1px solid #E4E8F2; padding-top:4px;">
@@ -86,27 +88,29 @@ ob_start();
   .watermark-text { color:#E24B4A; font-size:26px; font-weight:800; opacity:0.35; }
   table.info-grid { width:100%; border:1px solid #E4E8F2; border-radius:6px; font-size:10px; margin-bottom:14px; }
   table.info-grid td { padding:5px 10px; }
-  table.info-grid .label { color:#8A90A3; width:90px; display:inline-block; }
+  table.info-grid .label { color:#8A90A3; width:90px; display:inline-block; margin-right:8px; }
   table.items { width:100%; border-collapse:collapse; font-size:10px; margin-bottom:10px; }
-  table.items thead td { font-size:9px; text-transform:uppercase; color:#8A90A3; border-bottom:1px solid #E4E8F2; padding:4px 0; font-weight:700; }
+  table.items thead td { font-size:9px; text-transform:uppercase; color:#000000; border-bottom:1px solid #E4E8F2; padding:4px 0; font-weight:800; }
   table.items tbody td { padding:5px 0; border-bottom:1px solid #E4E8F2; }
   table.items td.amount { text-align:right; }
-  table.totals { width:45%; margin-left:55%; font-size:10px; }
+  table.totals { width:45%; margin-left:55%; font-size:10px; page-break-inside: avoid; }
   table.totals td { padding:3px 0; }
   table.totals td.val { text-align:right; }
   table.totals tr.grand td { border-top:2px solid #1E2333; font-size:13px; font-weight:800; color:#1E2FE0; padding-top:6px; }
-  .sig-block { margin-top:18px; padding-top:10px; border-top:1px solid #E4E8F2; font-size:10px; }
-  .sig-heading { font-weight:700; }
-  .sig-sub { color:#8A90A3; font-weight:600; margin-bottom:6px; }
-  .sig-label { color:#8A90A3; display:inline-block; width:60px; }
   .footnote { margin-top:12px; font-size:9px; color:#8A90A3; }
   .loyalty-block { margin-bottom:14px; padding:8px 10px; background:#F0F4FF; border:1px solid #D8E0FA; border-radius:6px; font-size:10px; }
   .loyalty-block .label { color:#8A90A3; width:120px; display:inline-block; }
-  .payment-methods { margin-top:16px; padding:10px 12px; border:1px solid #E4E8F2; border-radius:6px; font-size:10px; }
-  .payment-methods .pm-heading { font-size:11px; font-weight:800; margin-bottom:8px; }
-  .payment-methods .pm-option { font-weight:700; margin:8px 0 3px; }
-  .payment-methods .pm-detail { margin-left:14px; color:#1E2333; }
-  .payment-methods .pm-detail .pm-label { color:#8A90A3; }
+  .info-box { margin-top:16px; padding:10px 12px; border:1px solid #E4E8F2; border-radius:6px; font-size:10px; }
+  .info-box table.cols { width:100%; border-collapse:collapse; }
+  .info-box table.cols td { vertical-align:top; padding:0; }
+  .info-box table.cols td.col-left { width:60%; padding-right:14px; }
+  .info-box table.cols td.col-right { width:40%; border-left:1px solid #E4E8F2; padding-left:14px; }
+  .pm-heading, .sig-heading { font-size:11px; font-weight:800; margin-bottom:8px; }
+  .pm-option { font-weight:700; margin:8px 0 3px; }
+  .pm-detail { margin-left:14px; color:#1E2333; }
+  .pm-detail .pm-label { color:#8A90A3; }
+  .sig-sub { color:#8A90A3; font-weight:600; margin-bottom:6px; }
+  .sig-label { color:#8A90A3; display:inline-block; width:60px; }
 </style>
 
 <?php if ($isPending) { ?>
@@ -117,34 +121,40 @@ ob_start();
 
 <table class="info-grid">
   <tr>
-    <td width="50%"><span class="label">Customer:</span><?= htmlspecialchars($sale['customer_name'] ?? 'Walk-in Customer', ENT_QUOTES, 'UTF-8'); ?></td>
-    <td width="50%"><span class="label">Date:</span><?= date('d M Y', strtotime($sale['sale_date'])); ?></td>
+    <td width="50%"><span class="label"><strong>Customer:&nbsp;</strong></span><?= htmlspecialchars($sale['customer_name'] ?? 'Walk-in Customer', ENT_QUOTES, 'UTF-8'); ?></td>
+    <td width="50%"><span class="label"><strong>Date:&nbsp;</strong></span><?= date('d M Y', strtotime($sale['sale_date'])); ?></td>
   </tr>
   <tr>
-    <td><span class="label">Phone:</span><?= htmlspecialchars($sale['customer_phone'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
-    <td><span class="label">Payment Method:</span><?= htmlspecialchars($sale['payment_method'], ENT_QUOTES, 'UTF-8'); ?></td>
+    <td><span class="label"><strong>Phone:&nbsp;</strong></span><?= htmlspecialchars($sale['customer_phone'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
+    <td><span class="label"><strong>Payment Method:&nbsp;</strong></span><?= htmlspecialchars($sale['payment_method'], ENT_QUOTES, 'UTF-8'); ?></td>
   </tr>
   <tr>
-    <td><span class="label">Location:</span><?= $customerLocation ? htmlspecialchars($customerLocation, ENT_QUOTES, 'UTF-8') : '—'; ?></td>
-    <td><span class="label">Served By:</span><?= htmlspecialchars($sale['recorded_by_name'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
+    <td><span class="label"><strong>Location:&nbsp;</strong></span><?= $customerLocation ? htmlspecialchars($customerLocation, ENT_QUOTES, 'UTF-8') : '—'; ?></td>
+    <td><span class="label"><strong>Served By:&nbsp;</strong></span><?= htmlspecialchars($sale['recorded_by_name'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
   </tr>
   <tr>
-    <td><span class="label">Amount Paid:</span>RWF <?= money($sale['amount_paid']); ?></td>
+    <td><span class="label"><strong>Amount Paid:&nbsp;</strong></span>RWF <?= money($sale['amount_paid']); ?></td>
     <td></td>
   </tr>
 </table>
 
 <?php if ($showLoyalty) { ?>
 <div class="loyalty-block">
-  <span class="label">Points Earned</span><strong><?= (int) ($sale['loyalty_points_earned'] ?? 0); ?></strong>
+  <span class="label"><strong>Points Earned:&nbsp;</strong></span><strong><?= (int) ($sale['loyalty_points_earned'] ?? 0); ?></strong>
   &nbsp;&nbsp;&nbsp;
-  <span class="label">Total Loyalty Points</span><strong><?= (int) ($sale['customer_loyalty_points'] ?? 0); ?></strong>
+  <span class="label"><strong>Total Loyalty Points:&nbsp;</strong></span><strong><?= (int) ($sale['customer_loyalty_points'] ?? 0); ?></strong>
 </div>
 <?php } ?>
 
 <table class="items">
   <thead>
-    <tr><td>Item</td><td>Type</td><td class="amount">Qty</td><td class="amount">Unit Price</td><td class="amount">Total</td></tr>
+    <tr>
+      <td>Item</td>
+      <td>Type</td>
+      <td class="amount">Qty</td>
+      <td class="amount">Unit Price</td>
+      <td class="amount">Total</td>
+    </tr>
   </thead>
   <tbody>
     <?php while ($item = mysqli_fetch_assoc($items)) { ?>
@@ -155,7 +165,7 @@ ob_start();
           <span style="font-size:9px; color:#8A90A3;">(<?= htmlspecialchars($item['product_code'] ?? '', ENT_QUOTES, 'UTF-8'); ?> — <?= htmlspecialchars($item['unit'] ?? 'Pieces', ENT_QUOTES, 'UTF-8'); ?>)</span>
         <?php } ?>
       </td>
-      <td><?= htmlspecialchars($item['item_type'] === 'Product' ? 'Item' : 'Service', ENT_QUOTES, 'UTF-8'); ?></td>
+      <td><?= htmlspecialchars($item['item_type'] === 'Product' ? 'Product' : 'Service', ENT_QUOTES, 'UTF-8'); ?></td>
       <td class="amount"><?= (int) $item['quantity']; ?></td>
       <td class="amount"><?= money($item['unit_price']); ?></td>
       <td class="amount"><?= money($item['line_total']); ?></td>
@@ -170,9 +180,13 @@ ob_start();
   <tr class="grand"><td>Total</td><td class="val">RWF <?= money($sale['total_amount']); ?></td></tr>
 </table>
 
+<?php if ($showPaymentMethods || (!$isPending && !$isCancelled)) { ?>
+<div class="info-box">
+<table class="cols">
+<tr>
+<td class="col-left">
 <?php if ($showPaymentMethods) { ?>
-<div class="payment-methods">
-  <div class="pm-heading">ACCEPTED PAYMENT METHODS</div>
+  <div class="pm-heading"><strong>ACCEPTED PAYMENT METHODS</strong></div>
 
   <div class="pm-option">1. Bank Transfer &ndash; EQUITY BANK</div>
   <div class="pm-detail"><span class="pm-label">Account No:</span> <strong>4020201146022</strong></div>
@@ -181,16 +195,19 @@ ob_start();
   <div class="pm-option">2. MTN-MoMo Code</div>
   <div class="pm-detail"><span class="pm-label">MoMo Code:</span> <strong>070600</strong></div>
   <div class="pm-detail"><span class="pm-label">Account Name:</span> <strong>RISE MOTIVE Ltd</strong></div>
-</div>
 <?php } ?>
-
+</td>
+<td class="col-right">
 <?php if (!$isPending && !$isCancelled) { ?>
-<div class="sig-block">
-  <div class="sig-heading">For RISE MOTIVE</div>
+  <div class="sig-heading"><strong>For RISE MOTIVE</strong></div>
   <div class="sig-sub">Invoice Issued and Approved by:</div>
   <div><span class="sig-label">Name:</span> <strong><?= htmlspecialchars($sale['recorded_by_name'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></strong></div>
   <div><span class="sig-label">Position:</span> <strong><?= htmlspecialchars(ucfirst($sale['recorded_by_role'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?></strong></div>
   <div><span class="sig-label">Contact:</span> <strong><?= htmlspecialchars($sale['recorded_by_phone'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></strong></div>
+<?php } ?>
+</td>
+</tr>
+</table>
 </div>
 <?php } ?>
 
@@ -209,14 +226,13 @@ $bodyHtml = ob_get_clean();
 // ---- Build the PDF ----
 $mpdf = new Mpdf([
     'format' => 'A4',
-    'margin_top' => 32,
+    'margin_top' => 55,
     'margin_bottom' => 18,
-    'margin_header' => 6,
+    'margin_header' => 10,
     'margin_footer' => 6,
     'margin_left' => 15,
     'margin_right' => 15,
 ]);
-
 $mpdf->SetHTMLHeader($headerHtml);
 $mpdf->SetHTMLFooter($footerHtml);
 $mpdf->WriteHTML($bodyHtml);
