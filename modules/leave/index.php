@@ -32,6 +32,14 @@ if ($role === 'Manager') {
     $pendingMyApproval = mysqli_query($conn, "SELECT leave_requests.*, users.names AS employee_name FROM leave_requests INNER JOIN users ON leave_requests.user_id = users.id WHERE leave_requests.status IN ('Pending', 'Manager Approved') ORDER BY leave_requests.created_at");
 }
 
+// Managers/Admins also need a way to get back to ANY request (including
+// already-decided ones) so they can keep following its chat thread even
+// after it drops out of the approval queue above.
+$allRequests = null;
+if (in_array($role, ['Manager', 'Admin'], true)) {
+    $allRequests = mysqli_query($conn, "SELECT leave_requests.*, users.names AS employee_name FROM leave_requests INNER JOIN users ON leave_requests.user_id = users.id ORDER BY leave_requests.created_at DESC LIMIT 50");
+}
+
 function leave_status_badge($status) {
     $map = [
         'Pending' => 'secondary',
@@ -74,7 +82,38 @@ function leave_status_badge($status) {
                 <td><?= htmlspecialchars($row['leave_type'], ENT_QUOTES, 'UTF-8'); ?></td>
                 <td><?= htmlspecialchars($row['start_date'], ENT_QUOTES, 'UTF-8'); ?> &rarr; <?= htmlspecialchars($row['end_date'], ENT_QUOTES, 'UTF-8'); ?></td>
                 <td><?= leave_status_badge($row['status']); ?></td>
-                <td><a href="approve.php?id=<?= (int) $row['id']; ?>" class="rm-btn rm-btn-primary rm-btn-sm">Review</a></td>
+                <td>
+                    <a href="approve.php?id=<?= (int) $row['id']; ?>" class="rm-btn rm-btn-primary rm-btn-sm">Review</a>
+                    <a href="view.php?id=<?= (int) $row['id']; ?>" class="rm-btn rm-btn-secondary rm-btn-sm">View</a>
+                </td>
+            </tr>
+            <?php } ?>
+        </table>
+    </div>
+</div>
+<?php } ?>
+
+<?php if ($allRequests && mysqli_num_rows($allRequests) > 0) { ?>
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white"><h5 class="mb-0">All Leave Requests</h5></div>
+    <div class="card-body p-0">
+        <table class="table table-bordered table-hover bg-white mb-0">
+            <tr>
+                <th>Employee</th>
+                <th>Type</th>
+                <th>Dates</th>
+                <th>Status</th>
+                <th>Submitted</th>
+                <th></th>
+            </tr>
+            <?php while ($row = mysqli_fetch_assoc($allRequests)) { ?>
+            <tr>
+                <td><?= htmlspecialchars($row['employee_name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?= htmlspecialchars($row['leave_type'], ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?= htmlspecialchars($row['start_date'], ENT_QUOTES, 'UTF-8'); ?> &rarr; <?= htmlspecialchars($row['end_date'], ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?= leave_status_badge($row['status']); ?></td>
+                <td><?= date('d M Y', strtotime($row['created_at'])); ?></td>
+                <td><a href="view.php?id=<?= (int) $row['id']; ?>" class="rm-btn rm-btn-secondary rm-btn-sm">View</a></td>
             </tr>
             <?php } ?>
         </table>
@@ -98,9 +137,10 @@ function leave_status_badge($status) {
                 <th>Reason</th>
                 <th>Status</th>
                 <th>Submitted</th>
+                <th></th>
             </tr>
             <?php if (mysqli_num_rows($myLeaves) === 0) { ?>
-            <tr><td colspan="5" class="text-center text-muted py-4">No leave requests yet.</td></tr>
+            <tr><td colspan="6" class="text-center text-muted py-4">No leave requests yet.</td></tr>
             <?php } ?>
             <?php while ($row = mysqli_fetch_assoc($myLeaves)) { ?>
             <tr>
@@ -109,6 +149,7 @@ function leave_status_badge($status) {
                 <td><?= htmlspecialchars($row['reason'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
                 <td><?= leave_status_badge($row['status']); ?></td>
                 <td><?= date('d M Y', strtotime($row['created_at'])); ?></td>
+                <td><a href="view.php?id=<?= (int) $row['id']; ?>" class="rm-btn rm-btn-secondary rm-btn-sm">View</a></td>
             </tr>
             <?php } ?>
         </table>
