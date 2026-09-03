@@ -17,10 +17,17 @@ mysqli_stmt_bind_param($itemsStatement, 'i', $id);
 mysqli_stmt_execute($itemsStatement);
 $items = mysqli_stmt_get_result($itemsStatement);
 
-$canAct = $sale['status'] === 'Pending Discount Approval';
+$role = current_user_role();
+$isPending = $sale['status'] === 'Pending Discount Approval';
 $needsDiscount = (float) $sale['discount_amount'] > 0;
 $needsCredit = !empty($sale['needs_credit_approval']);
 $customerLoyaltyPoints = $sale['customer_loyalty_points'] !== null ? (int) $sale['customer_loyalty_points'] : 0;
+
+// Credit sales below the Loyalty Points threshold require the Managing
+// Director (Admin role) specifically — a Manager may view the request but
+// cannot approve/reject it themselves. Discount-only requests (no credit
+// issue) keep the existing Manager-or-Admin approval.
+$canAct = $isPending && (!$needsCredit || $role === 'Admin');
 
 if ($canAct && isset($_POST['decision'])) {
     $decision = $_POST['decision'];
@@ -54,6 +61,7 @@ $modal_icon = 'bi-shield-check'; $modal_title = 'Sale Approval'; $modal_subtitle
             <?php } ?>
             <?php if ($needsCredit) { ?>
                 <span class="badge bg-danger me-1">Credit — Below 500 Points</span>
+                <span class="badge bg-dark me-1">Requires Managing Director Approval</span>
             <?php } ?>
         </div>
 
@@ -77,8 +85,11 @@ $modal_icon = 'bi-shield-check'; $modal_title = 'Sale Approval'; $modal_subtitle
             </div>
         </div>
 
-        <?php if (!$canAct) { ?>
+        <?php if (!$isPending) { ?>
             <div class="alert alert-secondary" style="border-radius:10px;">This sale has already been actioned (<?= htmlspecialchars($sale['status'], ENT_QUOTES, 'UTF-8'); ?>).</div>
+            <a href="index.php" class="btn btn-light rm-btn-light">Back</a>
+        <?php } elseif (!$canAct) { ?>
+            <div class="alert alert-secondary" style="border-radius:10px;">This is a Credit sale below the Loyalty Points threshold, so it requires Managing Director (Admin) approval. You can view it, but only an Admin can approve or reject it.</div>
             <a href="index.php" class="btn btn-light rm-btn-light">Back</a>
         <?php } else { ?>
         <form method="POST">

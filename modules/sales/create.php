@@ -62,6 +62,8 @@ if (isset($_POST['save'])) {
         $error = 'Add at least one item or service with a valid quantity.';
     } elseif ($lineError) {
         $error = $lineError;
+    } elseif ($paymentMethod !== 'Credit' && $amountPaidInput <= 0) {
+        $error = 'Amount paid is required for this payment method.';
     } elseif ($discountAmount < 0 || $discountAmount > $subtotal) {
         $error = 'Discount cannot be negative or greater than the subtotal.';
     } else {
@@ -206,7 +208,7 @@ include '../../includes/header.php'; include '../../includes/sidebar.php';
                 </div>
                 <div class="col-md-4">
                     <label class="form-label small fw-semibold text-muted">Payment Method</label>
-                    <select name="payment_method" class="form-select rm-input" required>
+                    <select name="payment_method" id="paymentMethodSelect" class="form-select rm-input" required>
                         <option value="Cash">Cash</option>
                         <option value="Mobile Money">Mobile Money</option>
                         <option value="Bank Transfer">Bank Transfer</option>
@@ -270,6 +272,21 @@ const CUSTOMERS = <?= json_encode(array_map(function ($c) {
 const itemsBody = document.querySelector('#itemsTable tbody');
 const discountInput = document.getElementById('discountInput');
 const amountPaidInput = document.getElementById('amountPaidInput');
+const paymentMethodSelect = document.getElementById('paymentMethodSelect');
+
+function updateAmountPaidRequirement() {
+    if (paymentMethodSelect.value === 'Credit') {
+        amountPaidInput.required = false;
+    } else {
+        amountPaidInput.required = true;
+        if (parseFloat(amountPaidInput.value || 0) <= 0) {
+            amountPaidInput.value = '';
+        }
+    }
+}
+
+paymentMethodSelect.addEventListener('change', updateAmountPaidRequirement);
+updateAmountPaidRequirement();
 
 /**
  * Small reusable "type to filter" dropdown.
