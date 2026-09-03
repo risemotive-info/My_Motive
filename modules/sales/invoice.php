@@ -7,10 +7,11 @@ use Mpdf\Mpdf;
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 if (!$id) { header('Location: index.php?success=Invalid invoice requested.'); exit; }
 
-$statement = mysqli_prepare($conn, 'SELECT sales.*, customers.name AS customer_name, customers.phone AS customer_phone, customers.email AS customer_email, customers.address AS customer_address, customers.province AS customer_province, customers.district AS customer_district, customers.sector AS customer_sector, customers.loyalty_points AS customer_loyalty_points, users.names AS recorded_by_name, users.role AS recorded_by_role, users.phone AS recorded_by_phone
+$statement = mysqli_prepare($conn, 'SELECT sales.*, customers.name AS customer_name, customers.phone AS customer_phone, customers.email AS customer_email, customers.address AS customer_address, customers.province AS customer_province, customers.district AS customer_district, customers.sector AS customer_sector, customers.loyalty_points AS customer_loyalty_points, users.names AS recorded_by_name, users.role AS recorded_by_role, users.phone AS recorded_by_phone, roles.name AS recorded_by_position
     FROM sales
     LEFT JOIN customers ON sales.customer_id = customers.id
     LEFT JOIN users ON sales.recorded_by = users.id
+    LEFT JOIN roles ON users.role_id = roles.id
     WHERE sales.id = ?');
 mysqli_stmt_bind_param($statement, 'i', $id);
 mysqli_stmt_execute($statement);
@@ -84,8 +85,6 @@ ob_start();
 ?>
 <style>
   body { font-family: sans-serif; color:#1E2333; font-size:11px; }
-  .watermark-wrap { text-align:center; margin: -10px 0 6px; }
-  .watermark-text { color:#E24B4A; font-size:26px; font-weight:800; opacity:0.35; }
   table.info-grid { width:100%; border:1px solid #E4E8F2; border-radius:6px; font-size:10px; margin-bottom:14px; }
   table.info-grid td { padding:5px 10px; }
   table.info-grid .label { color:#8A90A3; width:90px; display:inline-block; margin-right:8px; }
@@ -115,12 +114,6 @@ ob_start();
   .sig-sub { color:#8A90A3; font-weight:600; margin-bottom:6px; }
   .sig-label { color:#8A90A3; display:inline-block; width:60px; }
 </style>
-
-<?php if ($isPending) { ?>
-  <div class="watermark-wrap"><span class="watermark-text">PENDING APPROVAL</span></div>
-<?php } elseif ($isCancelled) { ?>
-  <div class="watermark-wrap"><span class="watermark-text">CANCELLED</span></div>
-<?php } ?>
 
 <table class="info-grid">
   <tr>
@@ -207,7 +200,7 @@ ob_start();
   <div class="sig-heading"><strong>For RISE MOTIVE</strong></div>
   <div class="sig-sub">Invoice Issued and Approved by:</div>
   <div><span class="sig-label">Name:</span> <strong><?= htmlspecialchars($sale['recorded_by_name'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></strong></div>
-  <div><span class="sig-label">Position:</span> <strong><?= htmlspecialchars(ucfirst($sale['recorded_by_role'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?></strong></div>
+  <div><span class="sig-label">Position:</span> <strong><?= htmlspecialchars($sale['recorded_by_position'] ?? ucfirst($sale['recorded_by_role'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?></strong></div>
   <div><span class="sig-label">Contact:</span> <strong><?= htmlspecialchars($sale['recorded_by_phone'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></strong></div>
 <?php } ?>
 </td>
@@ -238,6 +231,20 @@ $mpdf = new Mpdf([
     'margin_left' => 15,
     'margin_right' => 15,
 ]);
+
+// ---- Real, page-covering watermark (replaces the old inline text label) ----
+if ($isPending) {
+    $mpdf->SetWatermarkText('PENDING APPROVAL');
+    $mpdf->showWatermarkText = true;
+    $mpdf->watermark_font = 'DejaVuSansCondensed';
+    $mpdf->watermarkTextAlpha = 0.15;
+} elseif ($isCancelled) {
+    $mpdf->SetWatermarkText('CANCELLED');
+    $mpdf->showWatermarkText = true;
+    $mpdf->watermark_font = 'DejaVuSansCondensed';
+    $mpdf->watermarkTextAlpha = 0.15;
+}
+
 $mpdf->SetHTMLHeader($headerHtml);
 $mpdf->SetHTMLFooter($footerHtml);
 $mpdf->WriteHTML($bodyHtml);
