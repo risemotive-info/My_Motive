@@ -24,25 +24,52 @@ if (isset($_GET['success'])) {
 ?>
 
 <?php
+$userId = current_user_id();
+$role = current_user_role();
+$isAdmin = $role === 'Admin'; // Admin (Managing Director) sees everyone's notifications; everyone else sees only their own.
+
 $currentPage = get_current_page();
-$totalRows = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM notifications"))['c'];
+
+if ($isAdmin) {
+    $totalRows = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM notifications"))['c'];
+} else {
+    $countStatement = mysqli_prepare($conn, "SELECT COUNT(*) AS c FROM notifications WHERE user_id = ?");
+    mysqli_stmt_bind_param($countStatement, 'i', $userId);
+    mysqli_stmt_execute($countStatement);
+    $totalRows = mysqli_fetch_assoc(mysqli_stmt_get_result($countStatement))['c'];
+}
+
 $totalPages = max(1, (int) ceil($totalRows / PER_PAGE));
 $currentPage = min($currentPage, $totalPages);
 $offset = ($currentPage - 1) * PER_PAGE;
 
-$query = "
-SELECT notifications.*, users.names
-FROM notifications
-LEFT JOIN users
-ON notifications.user_id = users.id
-ORDER BY notifications.id DESC
-LIMIT " . PER_PAGE . " OFFSET " . $offset;
+if ($isAdmin) {
+    $query = "
+    SELECT notifications.*, users.names
+    FROM notifications
+    LEFT JOIN users
+    ON notifications.user_id = users.id
+    ORDER BY notifications.id DESC
+    LIMIT " . PER_PAGE . " OFFSET " . $offset;
 
-$result = mysqli_query($conn, $query);
+    $result = mysqli_query($conn, $query);
+} else {
+    $statement = mysqli_prepare($conn, "
+    SELECT notifications.*, users.names
+    FROM notifications
+    LEFT JOIN users
+    ON notifications.user_id = users.id
+    WHERE notifications.user_id = ?
+    ORDER BY notifications.id DESC
+    LIMIT " . PER_PAGE . " OFFSET " . $offset);
+    mysqli_stmt_bind_param($statement, 'i', $userId);
+    mysqli_stmt_execute($statement);
+    $result = mysqli_stmt_get_result($statement);
+}
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
 
-    <h2>Notifications Management</h2>
+    <h2><?= $isAdmin ? 'Notifications Management' : 'My Notifications'; ?></h2>
 
 </div>
 
@@ -54,7 +81,9 @@ $result = mysqli_query($conn, $query);
 <table class="table table-bordered table-hover bg-white mb-0">
 
 <tr>
+    <?php if ($isAdmin) { ?>
     <th>User</th>
+    <?php } ?>
     <th>Title</th>
     <th>Message</th>
     <th>Status</th>
@@ -63,14 +92,16 @@ $result = mysqli_query($conn, $query);
 </tr>
 
 <?php if (mysqli_num_rows($result) === 0) { ?>
-<tr><td colspan="6" class="text-center text-muted py-4">No notifications yet.</td></tr>
+<tr><td colspan="<?= $isAdmin ? 6 : 5; ?>" class="text-center text-muted py-4">No notifications yet.</td></tr>
 <?php } ?>
 
 <?php while($row = mysqli_fetch_assoc($result)){ ?>
 
 <tr>
 
+<?php if ($isAdmin) { ?>
 <td><?= htmlspecialchars($row['names'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
+<?php } ?>
 
 <td><?= htmlspecialchars($row['title'], ENT_QUOTES, 'UTF-8'); ?></td>
 
@@ -106,11 +137,13 @@ View
 Mark Read
 </a>
 
+<?php if ($isAdmin) { ?>
 <a href="delete.php?id=<?= (int) $row['id']; ?>"
 class="rm-btn rm-btn-danger rm-btn-sm"
 onclick="return confirm('Delete this notification?')">
 Delete
 </a>
+<?php } ?>
 
 </td>
 
