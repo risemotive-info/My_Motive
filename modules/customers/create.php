@@ -11,17 +11,30 @@ if (isset($_POST['save'])) {
     $address = trim($_POST['address'] ?? '');
 
     if ($name === '') { $error = 'Customer name is required.'; }
+    elseif ($phone === '') { $error = 'Phone number is required.'; }
+    elseif (!preg_match('/^\d{10}$/', $phone)) { $error = 'Phone number must be exactly 10 digits.'; }
     elseif ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
          $error = 'Please enter a valid email address.'; }
     elseif ($province === '' || $district === '' || $sector === '') {
         $error = 'Please select Province, District, and Sector.';
     }
     else {
-        $statement = mysqli_prepare($conn, 'INSERT INTO customers (name, phone, email, province, district, sector, address) VALUES (?, ?, ?, ?, ?, ?, ?)');
-        mysqli_stmt_bind_param($statement, 'sssssss', $name, $phone, $email, $province, $district, $sector, $address);
-        if (mysqli_stmt_execute($statement)) {
-            header('Location: index.php?success=Customer added successfully.'); exit; }
-        $error = 'Unable to add customer.';
+        // A customer must be identifiable by phone number, and the same
+        // phone number can't belong to two different customer records.
+        $dupStatement = mysqli_prepare($conn, 'SELECT id FROM customers WHERE phone = ?');
+        mysqli_stmt_bind_param($dupStatement, 's', $phone);
+        mysqli_stmt_execute($dupStatement);
+        $existing = mysqli_fetch_assoc(mysqli_stmt_get_result($dupStatement));
+
+        if ($existing) {
+            $error = 'A customer with this phone number already exists.';
+        } else {
+            $statement = mysqli_prepare($conn, 'INSERT INTO customers (name, phone, email, province, district, sector, address) VALUES (?, ?, ?, ?, ?, ?, ?)');
+            mysqli_stmt_bind_param($statement, 'sssssss', $name, $phone, $email, $province, $district, $sector, $address);
+            if (mysqli_stmt_execute($statement)) {
+                header('Location: index.php?success=Customer added successfully.'); exit; }
+            $error = 'Unable to add customer.';
+        }
     }
 }
 include '../../includes/header.php';
@@ -39,7 +52,7 @@ $modal_subtitle = 'Create a new customer profile.';
         <form method="POST">
             <div class="mb-3"><label class="form-label small fw-semibold text-muted">Customer Name</label><input type="text" name="name" class="form-control rm-input" value="<?= htmlspecialchars($name ?? '', ENT_QUOTES, 'UTF-8'); ?>" required></div>
             <div class="row g-3 mb-3">
-                <div class="col-6"><label class="form-label small fw-semibold text-muted">Phone</label><input type="text" name="phone" class="form-control rm-input" value="<?= htmlspecialchars($phone ?? '', ENT_QUOTES, 'UTF-8'); ?>"></div>
+                <div class="col-6"><label class="form-label small fw-semibold text-muted">Phone</label><input type="text" name="phone" class="form-control rm-input" value="<?= htmlspecialchars($phone ?? '', ENT_QUOTES, 'UTF-8'); ?>" inputmode="numeric" pattern="\d{10}" maxlength="10" placeholder="0788888888" title="Phone number must be exactly 10 digits" required></div>
                 <div class="col-6"><label class="form-label small fw-semibold text-muted">Email</label><input type="email" name="email" class="form-control rm-input" value="<?= htmlspecialchars($email ?? '', ENT_QUOTES, 'UTF-8'); ?>"></div>
             </div>
 
