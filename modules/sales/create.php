@@ -4,9 +4,10 @@ require '../../includes/notification_helper.php';
 require '../../includes/sales_helpers.php';   // also loads fund_helpers.php and profit_rules.php (require_once)
 require '../../includes/product_unit_helpers.php';
 require_once '../../includes/sms_messages.php'; // NEW: customer SMS (MY MOTIVE SMS, messages 2 and 3)
+require_once '../../includes/digital_payment_helpers.php'; // NEW: Digital Payment (MTN MoMo through XentriPay)
 require_role(['Admin', 'Manager', 'Employee']);
 
-$customers = mysqli_query($conn, 'SELECT id, name FROM customers WHERE is_active = 1 ORDER BY name');
+$customers = mysqli_query($conn, 'SELECT id, name, phone FROM customers WHERE is_active = 1 ORDER BY name'); // CHANGED: phone, to fill in the Digital Payment pop-up
 $customerList = [];
 while ($c = mysqli_fetch_assoc($customers)) { $customerList[] = $c; }
 
@@ -21,6 +22,7 @@ if (isset($_POST['save'])) {
     $customerId = filter_input(INPUT_POST, 'customer_id', FILTER_VALIDATE_INT) ?: null;
     $saleDate = $_POST['sale_date'] ?? date('Y-m-d');
     $paymentMethod = $_POST['payment_method'] ?? '';
+    $digitalPaymentId = (int) filter_input(INPUT_POST, 'digital_payment_id', FILTER_VALIDATE_INT); // NEW: the CONFIRMED Digital Payment of this sale
     $discountAmount = filter_input(INPUT_POST, 'discount_amount', FILTER_VALIDATE_FLOAT);
     $discountAmount = $discountAmount === false || $discountAmount === null ? 0 : $discountAmount;
     $amountPaidInput = filter_input(INPUT_POST, 'amount_paid', FILTER_VALIDATE_FLOAT);
@@ -98,7 +100,7 @@ if (isset($_POST['save'])) {
         ];
     }
 
-    if (!$validDate || $validDate->format('Y-m-d') !== $saleDate || !in_array($paymentMethod, ['Cash', 'Mobile Money', 'Bank Transfer', 'Credit'], true)) {
+    if (!$validDate || $validDate->format('Y-m-d') !== $saleDate || !in_array($paymentMethod, ['Cash', 'Mobile Money', 'Bank Transfer', 'Credit', 'Digital Payment'], true)) {
         $error = 'Please provide a valid sale date and payment method.';
     } elseif (empty($lineItems)) {
         $error = 'Add at least one item or service with a valid quantity.';
@@ -110,6 +112,9 @@ if (isset($_POST['save'])) {
         $error = 'Credit sales need a registered customer. Please select a customer instead of Walk-in.';
     } elseif ($discountAmount < 0 || $discountAmount > $subtotal) {
         $error = 'Discount cannot be negative or greater than the subtotal.';
+    } elseif ($paymentMethod === 'Digital Payment' && ($digitalProblem = dp_validate_for_sale($conn, $digitalPaymentId, (int) current_user_id(), (float) $amountPaidInput)) !== null) {
+        // NEW: a Digital Payment sale can only be recorded with a payment that XentriPay has CONFIRMED (and that was not used before).
+        $error = $digitalProblem;
     } else {
         $totalAmount = $subtotal - $discountAmount;
         if ($paymentMethod !== 'Credit' && $totalAmount > 0 && $amountPaidInput <= 0) {
@@ -161,6 +166,11 @@ if (isset($_POST['save'])) {
                     $itemStatement = mysqli_prepare($conn, 'INSERT INTO sale_items (sale_id, item_type, product_id, service_name, quantity, unit, unit_price, line_total, pack_label, pack_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
                     mysqli_stmt_bind_param($itemStatement, 'isisssddsi', $saleId, $item['item_type'], $item['product_id'], $item['service_name'], $item['quantity'], $item['unit'], $item['unit_price'], $item['line_total'], $item['pack_label'], $item['pack_size']);
                     mysqli_stmt_execute($itemStatement);
+                }
+
+                if ($paymentMethod === 'Digital Payment') {
+                    // NEW: attach the CONFIRMED digital payment to this sale, once. If it was already used, nothing is saved.
+                    dp_consume_for_sale($conn, $digitalPaymentId, (int) $saleId, (int) $userId, (float) $amountPaidInput);
                 }
 
                 if (!$needsApproval) {
@@ -275,6 +285,7 @@ include '../../includes/header.php'; include '../../includes/sidebar.php';
 <div class="card border-0 shadow-sm">
     <div class="card-body p-4">
         <form method="POST" id="saleForm">
+            <input type="hidden" name="digital_payment_id" id="digitalPaymentId" value=""><!-- NEW: set when the customer has paid by Digital Payment -->
             <div class="row g-3 mb-3">
                 <div class="col-md-4">
                     <label class="form-label small fw-semibold text-muted">Customer</label>
@@ -291,6 +302,8 @@ include '../../includes/header.php'; include '../../includes/sidebar.php';
                         <option value="Mobile Money">Mobile Money</option>
                         <option value="Bank Transfer">Bank Transfer</option>
                         <option value="Credit">Credit</option>
+                        <?php $dpReady = xentripay_configured(); ?>
+                        <option value="Digital Payment"<?= $dpReady ? '' : ' disabled'; ?>>Digital Payment<?= $dpReady ? '' : ' (not set up yet)'; ?></option>
                     </select>
                 </div>
             </div>
@@ -352,7 +365,7 @@ const CATALOG = <?= json_encode(array_map(function ($p) {
 }, $catalogList), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 
 const CUSTOMERS = <?= json_encode(array_map(function ($c) {
-    return ['id' => (int) $c['id'], 'name' => $c['name']];
+    return ['id' => (int) $c['id'], 'name' => $c['name'], 'phone' => $c['phone'] ?? ''];
 }, $customerList), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 
 const UNITS_MAP = <?= json_encode($unitsMap, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>; // { productId: [ {unit_name, pack_size, is_base}, ... ] }, Items only
@@ -619,6 +632,51 @@ discountInput.addEventListener('input', recalcTotals);
 
 // Start with one row.
 document.getElementById('addRow').click();
+</script>
+<?php include '../../includes/digital_payment_ui.php'; ?>
+<script>
+// NEW: Digital Payment (MTN MoMo through XentriPay) for a new sale.
+// With any other payment method nothing here does anything. With Digital Payment, pressing Record Sale opens the pop-up
+// (amount + the customer's MTN MoMo number), waits for the customer to approve on their phone, and ONLY THEN saves the sale.
+(function () {
+    const form = document.getElementById('saleForm');
+    const idField = document.getElementById('digitalPaymentId');
+    const saveButton = form.querySelector('button[name="save"]');
+    const UNRECORDED = <?= json_encode(dp_unrecorded_for_user($conn, (int) current_user_id()), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+    const isDigital = function () { return paymentMethodSelect.value === 'Digital Payment'; };
+    const customerId = function () { const f = form.querySelector('input[name="customer_id"]'); return f ? f.value : ''; };
+    const customerPhone = function () { const c = CUSTOMERS.find(function (x) { return String(x.id) === String(customerId()); }); return c ? c.phone : ''; };
+
+    // The amount is asked in the pop-up, so the Amount Paid box must not stop the button first.
+    saveButton.addEventListener('click', function () {
+        if (isDigital() && !idField.value) { amountPaidInput.required = false; amountPaidInput.min = '0'; }
+    });
+    // Changing the payment method forgets a confirmed payment that has not been used (it stays in the list of received payments).
+    paymentMethodSelect.addEventListener('change', function () { idField.value = ''; });
+
+    form.addEventListener('submit', function (e) {
+        if (!isDigital() || idField.value) { return; }
+        e.preventDefault();
+        if (!(currentTotal > 0)) { alert('Add at least one item with a price before taking a Digital Payment.'); syncAmountPaidRule(); return; }
+        DigitalPay.pay({
+            purpose: 'sale',
+            amount: parseFloat(amountPaidInput.value) || currentTotal,
+            maxAmount: currentTotal,
+            phone: customerPhone(),
+            customerId: customerId(),
+            resume: UNRECORDED,
+            onClose: function () { syncAmountPaidRule(); },
+            onSuccess: function (attempt) {
+                // XentriPay has CONFIRMED the payment: now the sale is recorded, with exactly that amount.
+                idField.value = attempt.id;
+                amountPaidInput.value = attempt.amount;
+                const save = document.createElement('input'); save.type = 'hidden'; save.name = 'save'; save.value = '1';
+                form.appendChild(save);
+                form.submit();
+            }
+        });
+    });
+})();
 </script>
 
 <?php include '../../includes/footer.php'; ?>

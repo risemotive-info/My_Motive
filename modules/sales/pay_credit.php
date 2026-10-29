@@ -2,6 +2,8 @@
 require '../../config/db.php';
 require_once '../../includes/sales_helpers.php';   // NEW: also loads fund_helpers.php and profit_rules.php
 require_once '../../includes/sms_messages.php';    // NEW: payment SMS (MY MOTIVE SMS, message 4)
+require_once '../../includes/credit_payment_helpers.php';   // NEW: the payment is recorded by credit_record_payment(), shared with Digital Payment
+require_once '../../includes/digital_payment_helpers.php';  // NEW: Digital Payment (MTN MoMo through XentriPay)
 // CHANGED: this page had no role check, unlike every other sales page, so anyone who could
 // reach the URL could record payments (which also allocates profit to the RM Funds).
 require_role(['Admin', 'Manager', 'Employee']);
@@ -13,7 +15,7 @@ if (!$id) { header('Location: index.php?error=' . urlencode('Invalid sale reques
 // NEW (overdue charges): bring the invoice's daily charges up to date before showing it.
 credit_accrue_now($conn, (int) $id);
 
-$statement = mysqli_prepare($conn, 'SELECT sales.*, customers.name AS customer_name FROM sales LEFT JOIN customers ON sales.customer_id = customers.id WHERE sales.id = ?');
+$statement = mysqli_prepare($conn, 'SELECT sales.*, customers.name AS customer_name, customers.phone AS customer_phone FROM sales LEFT JOIN customers ON sales.customer_id = customers.id WHERE sales.id = ?');
 mysqli_stmt_bind_param($statement, 'i', $id);
 mysqli_stmt_execute($statement);
 $sale = mysqli_fetch_assoc(mysqli_stmt_get_result($statement));
@@ -42,66 +44,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($payAmount > $balance) {
         $error = 'Payment cannot exceed the remaining balance of RWF ' . number_format($balance, 2) . '.';
     } else {
-        mysqli_begin_transaction($conn);
         try {
-            // CHANGED: re-read the sale under a lock, so two payments at the same moment
-            // cannot both use the same old amount_paid or overpay the sale.
-            $lock = mysqli_prepare($conn, 'SELECT * FROM sales WHERE id = ? FOR UPDATE');
-            mysqli_stmt_bind_param($lock, 'i', $id);
-            mysqli_stmt_execute($lock);
-            $fresh = mysqli_fetch_assoc(mysqli_stmt_get_result($lock));
-
-            if (!$fresh || !in_array($fresh['status'], ['Credit', 'Partially Paid'], true)) {
-                throw new RuntimeException('This sale can no longer receive payments. Its status is now ' . ($fresh['status'] ?? 'unknown') . '.');
-            }
-            // NEW: charges due up to this moment are added first (same transaction, same lock).
-            credit_accrue($conn, (int) $id, $recordedBy = current_user_id());
-            $lock2 = mysqli_prepare($conn, 'SELECT * FROM sales WHERE id = ? FOR UPDATE');
-            mysqli_stmt_bind_param($lock2, 'i', $id);
-            mysqli_stmt_execute($lock2);
-            $fresh = mysqli_fetch_assoc(mysqli_stmt_get_result($lock2));
-            $freshBalance = round((float) $fresh['total_amount'] - (float) $fresh['amount_paid'] + (float) $fresh['charges_accrued'] - (float) $fresh['charges_paid'], 2);
-            if ($payAmount > $freshBalance) {
-                throw new RuntimeException('Payment cannot exceed the remaining balance of RWF ' . number_format($freshBalance, 2) . '.');
-            }
-
-            $insert = mysqli_prepare($conn, 'INSERT INTO sale_payments (sale_id, amount, recorded_by) VALUES (?, ?, ?)');
+            // CHANGED: the whole recording (lock, overdue charges, ledger, loyalty points, funds, commit and SMS) now lives in
+            // credit_record_payment(), so a payment typed in here and a confirmed Digital Payment are recorded by the SAME code.
             $recordedBy = current_user_id();
-            mysqli_stmt_bind_param($insert, 'idi', $id, $payAmount, $recordedBy);
-            mysqli_stmt_execute($insert);
-            $paymentId = (int) mysqli_insert_id($conn);
-
-            // CHANGED (overdue charges): the payment pays the charges first, then the invoice
-            // amount, each with its own ledger entry. The status is Paid only when both are cleared.
-            $applied = credit_apply_payment($conn, $fresh, (float) $payAmount, $paymentId, $recordedBy ? (int) $recordedBy : null);
-            $newStatus = $applied['status'];
-
-            $pointsMessage = '';
-            if ($newStatus === 'Paid') {
-                // NEW (72-hour rule): record when it was fully paid, and decide the pending points
-                // (awarded if paid in full by the deadline, otherwise not awarded).
-                $paidAt = mysqli_prepare($conn, 'UPDATE sales SET fully_paid_at = NOW() WHERE id = ? AND fully_paid_at IS NULL');
-                mysqli_stmt_bind_param($paidAt, 'i', $id);
-                mysqli_stmt_execute($paidAt);
-                if (($fresh['points_status'] ?? '') === 'Pending') {
-                    $awarded = sales_settle_pending_points($conn, (int) $id);
-                    $pointsMessage = $awarded > 0
-                        ? ' Paid within 72 hours: ' . $awarded . ' Loyalty Points awarded.'
-                        : ' Paid after the 72-hour deadline: no Loyalty Points for this invoice.';
-                }
-
-                // NEW (spec section 1): the payment that completes the sale puts its profit
-                // into the four Funds immediately. Safe if called twice.
-                allocate_sale_profit($conn, $id, $recordedBy ? (int) $recordedBy : null);
-            }
-
-            mysqli_commit($conn);
-            // NEW: "we received your payment" SMS, sent only after the payment is saved.
-            sms_notify_payment($conn, (int) $id, $paymentId, (float) $payAmount, $recordedBy ? (int) $recordedBy : null);
-            $split = $applied['to_charges'] > 0
-                ? ' RWF ' . number_format($applied['to_charges'], 2) . ' paid the overdue charges and RWF ' . number_format($applied['to_principal'], 2) . ' the invoice.'
-                : '';
-            header('Location: invoice.php?id=' . $id . '&success=' . urlencode('Payment recorded successfully.' . $split . $pointsMessage));
+            $result = credit_record_payment($conn, (int) $id, (float) $payAmount, $recordedBy ? (int) $recordedBy : null);
+            header('Location: invoice.php?id=' . $id . '&success=' . urlencode(credit_payment_success_message($result)));
             exit;
         } catch (mysqli_sql_exception $e) {
             mysqli_rollback($conn);
@@ -175,5 +123,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 </div>
+<?php include '../../includes/digital_payment_ui.php'; ?>
+<script>
+// NEW: after the amount is entered, ask whether the customer wants to pay using Digital Payment (MTN MoMo).
+//   Yes -> the pop-up asks for the customer's MTN MoMo number, waits for the customer to approve, and the payment is
+//          recorded automatically once XentriPay confirms it.
+//   No  -> the form is sent exactly as before (manual payment).
+(function () {
+    const form = document.querySelector('form[method="POST"]');
+    if (!form || !DigitalPay.enabled) { return; }
+    const amountInput = form.querySelector('[name="amount"]');
+    form.addEventListener('submit', function (e) {
+        if (form.dataset.manual === '1') { return; }
+        e.preventDefault();
+        const amount = parseFloat(amountInput.value);
+        if (!(amount > 0)) { amountInput.reportValidity(); return; }
+        DigitalPay.ask({
+            purpose: 'credit',
+            saleId: <?= (int) $id; ?>,
+            amount: amount,
+            amountLocked: true,
+            maxAmount: <?= json_encode((float) $balance); ?>,
+            phone: <?= json_encode((string) ($sale['customer_phone'] ?? '')); ?>,
+            customerId: <?= (int) ($sale['customer_id'] ?? 0); ?>,
+            onNo: function () { form.dataset.manual = '1'; form.submit(); }
+        });
+    });
+})();
+</script>
 </body>
 </html>

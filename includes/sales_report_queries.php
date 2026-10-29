@@ -44,7 +44,7 @@ function sales_report_lookups(mysqli $conn): array
         'products'  => sales_report_fetch($conn, "SELECT id, product_name, product_code, item_type FROM products ORDER BY item_type, product_name"),
         'customers' => sales_report_fetch($conn, "SELECT id, name FROM customers ORDER BY name"),
         'employees' => sales_report_fetch($conn, "SELECT id, names FROM users ORDER BY names"),
-        'payments'  => ['Cash', 'Mobile Money', 'Bank Transfer', 'Credit'],
+        'payments'  => ['Cash', 'Mobile Money', 'Bank Transfer', 'Credit', 'Digital Payment'],
     ];
 }
 
@@ -261,7 +261,7 @@ function sales_report_build(mysqli $conn, string $type, array $req): array
         // ------------------------------------------------------------------
         case 'payment':
             $method = (string) ($req['payment_method'] ?? '');
-            if (!in_array($method, ['Cash', 'Mobile Money', 'Bank Transfer', 'Credit'], true)) {
+            if (!in_array($method, ['Cash', 'Mobile Money', 'Bank Transfer', 'Credit', 'Digital Payment'], true)) {
                 return $fail('Please select a payment method.');
             }
             $filters[] = ['Payment Method', $method];
