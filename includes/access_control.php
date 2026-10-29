@@ -126,7 +126,7 @@ function access_ensure(mysqli $conn): void
     }
     // An employee added later without any role gets the starting role of their account type.
     mysqli_query($conn, "INSERT IGNORE INTO acl_user_roles (user_id, role_id)
-        SELECT u.id, r.id FROM users u JOIN acl_roles r ON r.system_key = LOWER(u.role)
+        SELECT u.id, r.id FROM users u JOIN acl_roles r ON r.system_key = LOWER(u.role) COLLATE utf8mb4_general_ci
         WHERE NOT EXISTS (SELECT 1 FROM acl_user_roles x WHERE x.user_id = u.id)");
 }
 
@@ -204,7 +204,7 @@ function access_page_permission(string $script): ?string
     if ($module === 'asset_management' && in_array($f, ['valuation', 'valuation_evidence', 'refund_receive', 'sync_capital_fund'], true)) { return 'asset_management.edit'; }
     if ($module === 'sales' && in_array($f, ['ledger', 'invoice', 'receipt'], true)) { return 'sales.view'; }
     if ($module === 'sales' && in_array($f, ['pay_credit', 'record_payment'], true)) { return 'sales.create'; }
-    if ($module === 'sales' && in_array($f, ['category_profit', 'category_profit_pdf'], true)) { return 'sales.reports'; }
+    if ($module === 'sales' && in_array($f, ['category_profit', 'category_profit_pdf', 'digital_payments'], true)) { return 'sales.reports'; }
     if ($module === 'customers' && preg_match('/^reward/', $f)) { return in_array($f, ['rewards', 'reward_evidence'], true) ? 'customers.view' : 'customers.edit'; }
 
     // Everything else: the module = folder, the action = file name.
