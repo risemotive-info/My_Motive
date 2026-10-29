@@ -29,6 +29,15 @@ $userId = (int) current_user_id();
 $role = current_user_role();
 $action = (string) ($_POST['action'] ?? $_GET['action'] ?? '');
 
+// Roles & Permissions: taking and following a Digital Payment needs the same permission as recording a sale (Sales: Create).
+// It is checked HERE too, so this service never depends on where the rest of the portal starts its page check.
+if (is_file(__DIR__ . '/../../includes/access_control.php')) {
+    require_once __DIR__ . '/../../includes/access_control.php';
+    if (!access_can('sales.create', $conn)) {
+        dp_reply(['ok' => false, 'message' => 'You do not have permission to take payments.'], 403);
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !dp_csrf_ok()) {
     dp_reply(['ok' => false, 'message' => 'Your session expired. Please reload the page and try again.'], 403);
 }

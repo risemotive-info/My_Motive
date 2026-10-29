@@ -10,6 +10,17 @@
 require '../../config/db.php';
 require_once '../../includes/digital_payment_helpers.php';
 require_role(['Admin', 'Manager']);
+// Roles & Permissions: the list is a sales report (Sales: Reports). Checked here too, whoever starts the page check.
+if (is_file(__DIR__ . '/../../includes/access_control.php')) {
+    require_once __DIR__ . '/../../includes/access_control.php';
+    if (!access_can('sales.reports', $conn)) {
+        http_response_code(403);
+        $GLOBALS['ACCESS_DENIED_PERMISSION'] = 'sales.reports';
+        if (is_file(__DIR__ . '/../../includes/access_denied.php')) { include __DIR__ . '/../../includes/access_denied.php'; }
+        else { echo 'You do not have permission to open this page (sales.reports).'; }
+        exit;
+    }
+}
 
 $e = function ($v) { return htmlspecialchars((string) ($v ?? ''), ENT_QUOTES, 'UTF-8'); };
 

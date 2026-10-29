@@ -91,7 +91,11 @@ function dp_new_reference(string $purpose): string
 
 function dp_row(mysqli $conn, int $id, bool $lock = false): ?array
 {
-    $st = mysqli_prepare($conn, 'SELECT * FROM digital_payments WHERE id = ?' . ($lock ? ' FOR UPDATE' : ''));
+    // age_seconds / checked_seconds_ago are measured by the DATABASE (its own NOW()), so a difference between the PHP clock
+    // and the database clock (for example Rwanda time on one side) can never change a decision.
+    $st = mysqli_prepare($conn, 'SELECT *, TIMESTAMPDIFF(SECOND, created_at, NOW()) AS age_seconds,
+        IF(last_checked_at IS NULL, NULL, TIMESTAMPDIFF(SECOND, last_checked_at, NOW())) AS checked_seconds_ago
+        FROM digital_payments WHERE id = ?' . ($lock ? ' FOR UPDATE' : ''));
     mysqli_stmt_bind_param($st, 'i', $id);
     mysqli_stmt_execute($st);
     $row = mysqli_fetch_assoc(mysqli_stmt_get_result($st));
@@ -181,13 +185,13 @@ function dp_start(mysqli $conn, array $in, int $userId): array
             $detail .= ' - credit payment, invoice RM' . str_pad((string) $saleId, 6, '0', STR_PAD_LEFT);
 
             // One digital request at a time for the same invoice, so a customer is never asked to pay twice by mistake.
-            $other = mysqli_prepare($conn, "SELECT id, amount, msisdn, recorded_by, created_at FROM digital_payments
+            $other = mysqli_prepare($conn, "SELECT id, amount, msisdn, recorded_by, TIMESTAMPDIFF(MINUTE, created_at, NOW()) AS minutes_ago FROM digital_payments
                 WHERE purpose = 'credit' AND sale_id = ? AND status IN ('initiated', 'pending') AND created_at >= (NOW() - INTERVAL 10 MINUTE) ORDER BY id DESC LIMIT 1");
             mysqli_stmt_bind_param($other, 'i', $saleId);
             mysqli_stmt_execute($other);
             $open = mysqli_fetch_assoc(mysqli_stmt_get_result($other));
             if ($open && !((int) $open['recorded_by'] === $userId && abs((float) $open['amount'] - $amount) < 0.01 && $open['msisdn'] === $phone['msisdn'])) {
-                return ['ok' => false, 'message' => 'A Digital Payment request for this invoice is already waiting for the customer (started at ' . date('H:i', strtotime($open['created_at'])) . '). Let it finish, or stop waiting for it first.'];
+                return ['ok' => false, 'message' => 'A Digital Payment request for this invoice is already waiting for the customer (started ' . ((int) $open['minutes_ago'] === 0 ? 'a moment' : (int) $open['minutes_ago'] . ' minute(s)') . ' ago). Let it finish, or stop waiting for it first.'];
             }
         } else {
             $customerId = !empty($in['customer_id']) ? (int) $in['customer_id'] : null;
@@ -270,11 +274,11 @@ function dp_refresh(mysqli $conn, int $id, bool $force = false): ?array
     }
     try {
         $open = in_array($row['status'], ['initiated', 'pending', 'cancelled'], true)
-            || ($row['status'] === 'expired' && strtotime($row['created_at']) > time() - 3 * 86400);
+            || ($row['status'] === 'expired' && (int) $row['age_seconds'] < 3 * 86400);
 
         if ($open && !empty($row['gateway_refid'])) {
             $gap = (int) (xentripay_settings()['poll_gap'] ?? DP_POLL_GAP_SECONDS);
-            $recently = $gap > 0 && !empty($row['last_checked_at']) && strtotime($row['last_checked_at']) > time() - $gap;
+            $recently = $gap > 0 && $row['checked_seconds_ago'] !== null && (int) $row['checked_seconds_ago'] < $gap;
             if ($force || !$recently) {
                 $touch = mysqli_prepare($conn, 'UPDATE digital_payments SET last_checked_at = NOW() WHERE id = ?');
                 mysqli_stmt_bind_param($touch, 'i', $id);
@@ -300,7 +304,7 @@ function dp_refresh(mysqli $conn, int $id, bool $force = false): ?array
                         mysqli_stmt_bind_param($up, 'i', $id);
                         mysqli_stmt_execute($up);
                     }
-                    if (strtotime($row['created_at']) < time() - DP_EXPIRE_HOURS * 3600 && in_array($row['status'], ['initiated', 'pending', 'cancelled'], true)) {
+                    if ((int) $row['age_seconds'] > DP_EXPIRE_HOURS * 3600 && in_array($row['status'], ['initiated', 'pending', 'cancelled'], true)) {
                         $up = mysqli_prepare($conn, "UPDATE digital_payments SET status = 'expired', failure_reason = 'No approval was received in time.' WHERE id = ? AND status IN ('initiated', 'pending', 'cancelled')");
                         mysqli_stmt_bind_param($up, 'i', $id);
                         mysqli_stmt_execute($up);
@@ -388,7 +392,7 @@ function dp_validate_for_sale(mysqli $conn, int $id, int $userId, float $amountP
     if (!empty($row['applied_at']) || $row['sale_id'] !== null) {
         return 'This digital payment has already been used for another sale.';
     }
-    if (strtotime($row['created_at']) < time() - DP_SALE_USE_DAYS * 86400) {
+    if ((int) $row['age_seconds'] > DP_SALE_USE_DAYS * 86400) {
         return 'This digital payment is too old to be used for a new sale. Please contact the Admin.';
     }
     if (abs((float) $row['amount'] - $amountPaid) > 0.009) {
