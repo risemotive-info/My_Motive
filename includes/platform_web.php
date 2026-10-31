@@ -182,7 +182,9 @@ function platform_page_start(string $title, ?array $admin = null, string $active
         'requests'  => ['requests.php', 'Sign-up requests', 'users'],
         'companies' => ['companies.php', 'Businesses', 'building'],
         'tickets'   => ['tickets.php', 'Support tickets', 'mail'],
+        'announcements' => ['announcements.php', 'Announcements', 'headline'],   // NEW
         'emails'    => ['emails.php', 'Emails', 'mail'],
+
         'profile'   => ['profile.php', 'My profile', 'users'],
     ];
     echo '<div class="mma-shell"><aside class="mma-side"><div class="mma-brand"><img src="' . h($logo) . '" alt=""><div>MY MOTIVE<small>Platform</small></div></div><nav class="mma-nav">';

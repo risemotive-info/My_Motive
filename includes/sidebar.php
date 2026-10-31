@@ -160,6 +160,17 @@ try {
         <?php if ($supportUnread > 0) { ?><span class="badge rounded-pill ms-1" style="background:#E24B4A;"><?= $supportUnread > 99 ? '99+' : $supportUnread; ?></span><?php } ?>
     </a>
 
+   <?php // NEW: Announcements from the MY MOTIVE team, with a red number for the ones not read yet
+    $announceNew = 0;
+    try {
+        require_once __DIR__ . '/announcement_helpers.php';
+        $announceNew = announcement_unread_count((int) mm_company_id(), (int) current_user_id(), current_user_role() === 'Admin');
+    } catch (Throwable $e) {
+    } ?>
+    <a href="../announcements/index.php" class="<?= navActive('announcements', $currentPath) ?>">
+        <i class="bi bi-megaphone-fill"></i> Announcements<?= $announceNew > 0 ? ' <span class="badge text-bg-danger ms-1">' . (int) $announceNew . '</span>' : ''; ?>
+    </a>
+
     <?php echo mm_filter_menu(ob_get_clean()); ?>
 
     <div style="border-top:1px solid rgba(255,255,255,.08); margin:14px 10px 10px; padding-top:14px;">

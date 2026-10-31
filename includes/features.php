@@ -41,6 +41,7 @@ const MM_MODULE_FEATURE = [
     'search'            => '*',
     'support'           => '*',   // NEW: Support tickets to the platform team (every business, every package)
     'company'           => '*',   // the business profile page (it is limited to the Admin role inside the page)
+    'announcements'     => '*', 
 ];
 
 /** Pages inside modules/transactions/ that are the "RM Funds" screens (a feature of their own). */

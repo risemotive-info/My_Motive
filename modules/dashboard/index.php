@@ -148,8 +148,37 @@ $activityFeed = array_slice($activityFeed, 0, 6);
     </div>
 </div>
 
+<?php // NEW: Announcements from the MY MOTIVE team: the ones this person has not read yet
+require_once '../../includes/announcement_helpers.php';
+$announceUnread = [];
+try {
+    $announceUnread = announcement_for_user((int) mm_company_id(), (int) current_user_id(), current_user_role() === 'Admin', true, 4);
+} catch (Throwable $e) {
+}
+foreach (array_slice($announceUnread, 0, 3) as $an) {
+    $anClass = announcement_alert_class($an['level']);
+    $anLong = mb_strlen($an['body']) > 280; ?>
+<div class="alert alert-<?= $anClass; ?> mb-3" role="alert">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div style="min-width:0;flex:1">
+            <strong><i class="bi bi-megaphone-fill me-1"></i><?= announcement_h($an['title']); ?></strong>
+            <div style="white-space:pre-wrap;word-break:break-word;"><?= announcement_h($anLong ? mb_substr($an['body'], 0, 280) . '...' : $an['body']); ?></div>
+            <?php if ($anLong) { ?><a class="alert-link" href="../announcements/index.php">Read more</a> <?php } ?>
+            <?php if (!empty($an['link_url'])) { ?><a class="alert-link" href="<?= announcement_h($an['link_url']); ?>" target="_blank" rel="noopener noreferrer"><?= announcement_h($an['link_label'] ?: 'Learn more'); ?></a><?php } ?>
+        </div>
+        <form method="POST" action="../announcements/index.php" class="m-0">
+            <input type="hidden" name="csrf" value="<?= announcement_h(announcement_csrf_token()); ?>">
+            <input type="hidden" name="action" value="read"><input type="hidden" name="id" value="<?= (int) $an['id']; ?>"><input type="hidden" name="back" value="dashboard">
+            <button type="submit" class="btn btn-sm btn-outline-<?= $anClass; ?>">Got it</button>
+        </form>
+    </div>
+</div>
+<?php } ?>
+<?php if (count($announceUnread) > 3) { ?><p class="mb-3"><a href="../announcements/index.php">See all announcements</a></p><?php } ?>
+
 <div class="row g-3 mb-4">
     <?php foreach ($fundCards as $fc) { ?>
+
     <!-- CHANGED: RM fund cards are the same size as Employees, Departments, etc. -->
     <div class="col-6 col-xl-4">
         <a href="<?= $fc['link']; ?>" class="text-decoration-none">
