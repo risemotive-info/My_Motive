@@ -1,4 +1,4 @@
-﻿-- Deleting a payroll, a transaction, a loan, a reward or a purchase order keeps the money record and marks it as 'deleted'
+-- Deleting a payroll, a transaction, a loan, a reward or a purchase order keeps the money record and marks it as 'deleted'
 -- (status = 'deleted', with who deleted it and when), so the history and the reports stay correct. But the list of values that
 -- transactions.status could hold did not include that word, so a database that checks its values (every normal server) refused it,
 -- and the page answered "Unable to delete ... Nothing was changed."
