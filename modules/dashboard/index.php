@@ -297,6 +297,21 @@ $activityFeed = array_slice($activityFeed, 0, 6);
 </div>
 <?php } ?>
 
+<!-- NEW (Support): raise a ticket to the MY MOTIVE team and follow the answers -->
+<div class="rm-card mb-4">
+    <div class="card-header"> Support</div>
+    <div class="card-body d-flex flex-wrap align-items-center gap-2">
+        <a href="../support/index.php" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-list-ul me-1"></i> My tickets
+            <?php if (!empty($supportUnread)) { ?><span class="badge rounded-pill ms-1" style="background:#E24B4A;"><?= (int) $supportUnread; ?></span><?php } ?>
+        </a>
+        <a href="../support/create.php" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-circle me-1"></i> Raise a ticket
+        </a>
+        <span class="text-muted small">A question or something not working? Tell the MY MOTIVE team.</span>
+    </div>
+</div>
+
 <div class="rm-card mb-4">
     <div class="card-header">⚡ Quick actions</div>
     <div class="card-body">

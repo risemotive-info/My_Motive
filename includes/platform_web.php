@@ -166,17 +166,30 @@ function platform_page_start(string $title, ?array $admin = null, string $active
         $pending = (int) mysqli_fetch_row(mysqli_query(platform_conn(), "SELECT COUNT(*) FROM signup_requests WHERE status = 'pending'"))[0];
     } catch (Throwable $e) {
     }
+    // NEW (Support): tickets nobody has read yet
+    $ticketsUnread = 0;
+    try {
+        if (is_file(__DIR__ . '/support_helpers.php')) {
+            require_once __DIR__ . '/support_helpers.php';
+        }
+        if (function_exists('support_admin_unread')) {
+            $ticketsUnread = (int) support_admin_unread();
+        }
+    } catch (Throwable $e) {
+    }
     $nav = [
         'dashboard' => ['index.php', 'Dashboard', 'chart'],
         'requests'  => ['requests.php', 'Sign-up requests', 'users'],
         'companies' => ['companies.php', 'Businesses', 'building'],
+        'tickets'   => ['tickets.php', 'Support tickets', 'mail'],
         'emails'    => ['emails.php', 'Emails', 'mail'],
         'profile'   => ['profile.php', 'My profile', 'users'],
     ];
     echo '<div class="mma-shell"><aside class="mma-side"><div class="mma-brand"><img src="' . h($logo) . '" alt=""><div>MY MOTIVE<small>Platform</small></div></div><nav class="mma-nav">';
     foreach ($nav as $key => [$file, $label, $icon]) {
+        $badge = $key === 'requests' ? $pending : ($key === 'tickets' ? $ticketsUnread : 0);
         echo '<a class="' . ($active === $key ? 'on' : '') . '" href="' . h(BASE_URL . '/platform/' . $file) . '">' . mm_icon($icon, 19) . '<span>' . h($label) . '</span>'
-            . ($key === 'requests' && $pending > 0 ? '<span class="cnt">' . $pending . '</span>' : '') . '</a>';
+            . ($badge > 0 ? '<span class="cnt">' . $badge . '</span>' : '') . '</a>';
     }
     $initial = strtoupper(mb_substr((string) $admin['name'], 0, 1)) ?: 'A';
     echo '</nav><div class="mma-user"><div class="av">' . (admin_avatar_url($admin) ? '<img src="' . h(admin_avatar_url($admin)) . '" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover">' : h($initial)) . '</div><div class="who">' . h($admin['name']) . '<small>' . h($admin['email']) . '</small></div>'

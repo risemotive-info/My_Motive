@@ -147,6 +147,19 @@ try {
         <i class="bi bi-bell-fill"></i> Notifications
     </a>
 
+    <?php
+    // NEW (Support): tickets to the MY MOTIVE team, with the number of answers not read yet.
+    $supportUnread = 0;
+    try {
+        if (is_file(__DIR__ . '/support_helpers.php')) { require_once __DIR__ . '/support_helpers.php'; }
+        if (function_exists('support_business_unread')) { $supportUnread = (int) support_business_unread(); }
+    } catch (Throwable $supportError) { $supportUnread = 0; }
+    ?>
+    <a href="../support/index.php" class="<?= navActive('/support/', $currentPath) ?>">
+        <i class="bi bi-question-circle-fill"></i> Support
+        <?php if ($supportUnread > 0) { ?><span class="badge rounded-pill ms-1" style="background:#E24B4A;"><?= $supportUnread > 99 ? '99+' : $supportUnread; ?></span><?php } ?>
+    </a>
+
     <?php echo mm_filter_menu(ob_get_clean()); ?>
 
     <div style="border-top:1px solid rgba(255,255,255,.08); margin:14px 10px 10px; padding-top:14px;">
