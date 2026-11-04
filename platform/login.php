@@ -51,6 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 mm_public_start('Platform sign in', [
+    'head' => '<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="' . h(mm_asset('css/mm-admin-theme.css')) . '">',
+    'body_class' => 'mm-admin',
     'width' => 'slim',
     'shell' => 'narrow',
     'panel' => [

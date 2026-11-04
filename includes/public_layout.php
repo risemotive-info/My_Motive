@@ -76,8 +76,11 @@ function mm_public_start(string $title, array $opt = []): void
         . '<link rel="icon" href="' . h($logo) . '">'
         . '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
         . '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">'
-        . '<link rel="stylesheet" href="' . h(mm_asset('css/mm-public.css')) . '">'
-        . '</head><body class="mm">';
+ . '<link rel="stylesheet" href="' . h(mm_asset('css/mm-public.css')) . '">'
+        . ($opt['head'] ?? '')   // extra tags for the head, written by our own code (the admin sign-in page adds its theme here)
+        . '</head><body class="mm' . (isset($opt['body_class']) ? ' ' . h($opt['body_class']) : '') . '">';
+
+
     echo '<div class="mm-topbar"><img src="' . h($logo) . '" alt="">MY MOTIVE</div>';
     echo '<div class="mm-shell' . (($opt['shell'] ?? '') === 'narrow' ? ' mm-narrow' : '') . '">';
     echo '<aside class="mm-brand"><div class="mm-logo"><img src="' . h($logo) . '" alt="">MY MOTIVE</div>'

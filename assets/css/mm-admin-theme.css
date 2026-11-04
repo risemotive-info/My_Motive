@@ -1,0 +1,66 @@
+/* MY MOTIVE admin theme (myadmin.risemotive.rw)
+   - primary colour: blue-800 (#1E40AF), used for buttons, links, highlights and focus rings
+   - the sidebar: solid blue-800 with white words
+   - font: Roboto, sans-serif, everywhere in the admin
+   It is loaded AFTER mm-public.css and mm-admin.css and only on the admin pages, so the public pages are not touched.
+   To go back to the old look, remove its <link> line in includes/platform_web.php. */
+
+:root {
+  --mm-primary: #1E40AF;        /* blue-800 */
+  --mm-primary-dark: #1E3A8A;   /* blue-900: hover and pressed */
+  --mm-accent: #1E40AF;         /* the old second colour of the gradients: now the same blue, so buttons are one solid blue */
+  --mm-violet: #1E40AF;
+  --mm-tint: #EFF6FF;           /* blue-50: soft highlights */
+  --mm-bg: #F3F6FC;             /* the page behind the cards */
+  --mm-ring: rgba(30, 64, 175, 0.2);
+  --bs-primary: #1E40AF;
+  --bs-primary-rgb: 30, 64, 175;
+  --bs-link-color: #1E40AF;
+  --bs-link-color-rgb: 30, 64, 175;
+  --bs-link-hover-color: #1E3A8A;
+  --bs-link-hover-color-rgb: 30, 58, 138;
+  --bs-body-font-family: Roboto, sans-serif;
+  --bs-font-sans-serif: Roboto, sans-serif;
+}
+
+/* ---------- the font: Roboto everywhere (code samples keep their own monospace) ---------- */
+body.mm,
+body.mm-admin { font-family: Roboto, sans-serif; }
+body.mm-admin *:not(code):not(pre):not(kbd):not(samp) { font-family: Roboto, sans-serif; }
+
+/* ---------- the sidebar: blue-800, white words ---------- */
+body.mm-admin .mma-side { background: #1E40AF; color: #fff; }
+body.mm-admin .mma-brand { color: #fff; }
+body.mm-admin .mma-brand small { color: rgba(255, 255, 255, 0.78); }
+body.mm-admin .mma-nav a { color: #fff; font-weight: 500; }
+body.mm-admin .mma-nav a:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+body.mm-admin .mma-nav a.on { background: rgba(255, 255, 255, 0.2); color: #fff; font-weight: 700; box-shadow: inset 4px 0 0 #fff; }
+body.mm-admin .mma-nav a svg { color: #fff; opacity: 1; }
+body.mm-admin .mma-nav .cnt { background: #fff; color: #1E40AF; }
+body.mm-admin .mma-user { border-top-color: rgba(255, 255, 255, 0.28); }
+body.mm-admin .mma-user .av { background: rgba(255, 255, 255, 0.2); color: #fff; }
+body.mm-admin .mma-user .who { color: #fff; }
+body.mm-admin .mma-user .who small { color: rgba(255, 255, 255, 0.78); }
+body.mm-admin .mma-user a { color: #fff; }
+body.mm-admin .mma-user a:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+
+/* ---------- buttons, forms and links in blue-800 ---------- */
+body.mm-admin .mma-main .btn-primary,
+body.mm-admin .mma-main .btn-primary:focus { background: var(--mm-primary); border: 0; box-shadow: 0 6px 16px rgba(30, 64, 175, 0.28); }
+body.mm-admin .mma-main .btn-primary:hover,
+body.mm-admin .mma-main .btn-primary:active { background: var(--mm-primary-dark); }
+body.mm-admin .mm-btn:not(.mm-ghost) { background: var(--mm-primary); box-shadow: 0 8px 22px rgba(30, 64, 175, 0.3); }
+body.mm-admin .mm-btn:not(.mm-ghost):hover { background: var(--mm-primary-dark); }
+body.mm-admin .mma-main .btn-outline-primary { color: var(--mm-primary); border-color: #BFDBFE; }
+body.mm-admin .mma-main .btn-outline-primary:hover { background: var(--mm-tint); border-color: var(--mm-primary); color: var(--mm-primary-dark); }
+body.mm-admin .mm-input:focus,
+body.mm-admin .mm-select:focus,
+body.mm-admin .mm-group:focus-within,
+body.mm-admin .mma-main .form-control:focus,
+body.mm-admin .mma-main .form-select:focus { border-color: var(--mm-primary); box-shadow: 0 0 0 4px var(--mm-ring); }
+body.mm-admin .form-check-input:checked { background-color: var(--mm-primary); border-color: var(--mm-primary); }
+body.mm-admin .mma-main .table tbody tr:hover { background: var(--mm-tint); }
+
+/* ---------- the admin sign-in page (it is drawn by the shared page frame, so it gets the theme through the body class "mm-admin") ---------- */
+body.mm-admin .mm-brand { background: #1E40AF; }
+body.mm-admin .mm-topbar { background: #1E40AF; }
