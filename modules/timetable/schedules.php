@@ -39,8 +39,10 @@ tt_flash();
         <tr>
             <td class="ps-3"><strong><?= tt_e($e['names']); ?></strong><div class="small text-muted"><?= tt_e($e['department']); ?> · <?= tt_e($e['role']); ?></div></td>
             <td><?= $p ? tt_badge(['work' => 'Scheduled', 'off' => 'Off Day', 'holiday' => 'Holiday', 'leave' => 'On Leave'][$p['day_type']]) . ($p['schedule_kind'] === 'temporary' ? ' <span class="badge bg-info">temporary</span>' : '') : tt_badge('No Schedule'); ?></td>
-            <?php if ($p) { $s = mysqli_fetch_assoc(mysqli_query($conn, 'SELECT * FROM tt_schedules WHERE id = ' . (int) $p['schedule_id'])); $days = ['1' => 'Mon', '2' => 'Tue', '3' => 'Wed', '4' => 'Thu', '5' => 'Fri', '6' => 'Sat', '7' => 'Sun']; ?>
-                <td><?= tt_e(implode(' ', array_map(function ($x) use ($days) { return $days[$x] ?? $x; }, explode(',', $s['working_days'])))); ?><div><?= substr($s['report_time'], 0, 5); ?>–<?= substr($s['departure_time'], 0, 5); ?> · <?= tt_dur(tt_engine_scheduled_minutes(array_merge($p, ['day_type' => 'work']))); ?>/day</div></td>
+            <?php if ($p) { $s = tt_schedule_full($conn, (int) $p['schedule_id']); ?>
+                <td class="small"><?php foreach (array_filter(explode(',', $s['working_days']), 'strlen') as $w) { $x = $s['day_times'][(int) $w] ?? $s; ?>
+                    <div<?= (int) $w === tt_weekday($today) ? ' class="fw-bold"' : ''; ?>><?= TT_WEEKDAYS[(int) $w]; ?> <?= substr($x['report_time'], 0, 5); ?>–<?= substr($x['departure_time'], 0, 5); ?></div>
+                <?php } ?><?php if ($p['day_type'] === 'work') { ?><div class="text-muted">Today: <?= tt_dur(tt_engine_scheduled_minutes($p)); ?> of work</div><?php } ?></td>
                 <td class="small"><?php foreach ($p['breaks'] as $b) { ?><div><?= tt_e($b['label']); ?> <?= tt_hm($b['start']); ?>–<?= tt_hm($b['end']); ?></div><?php } ?></td>
                 <td class="small"><?= $p['post'] ? tt_e($p['post']['name']) . ' ' . tt_hm($p['post']['leave_main']) . '–' . tt_hm($p['post']['return_main']) : '—'; ?></td>
             <?php } else { ?><td colspan="3" class="text-muted small">No timetable</td><?php } ?>

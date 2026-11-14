@@ -93,7 +93,17 @@ function tt_engine_plan(?array $schedule, array $breaks, string $date, string $d
     if (!$schedule) { return null; }
     $d = $defaults + TT_DEFAULTS;
     $days = array_map('intval', array_filter(explode(',', (string) $schedule['working_days']), 'strlen'));
-    if ($dayType === 'work' && !in_array(tt_weekday($date), $days, true)) { $dayType = 'off'; $dayLabel = $dayLabel ?: 'Not a working day'; }
+    $wd = tt_weekday($date);
+    if ($dayType === 'work' && !in_array($wd, $days, true)) { $dayType = 'off'; $dayLabel = $dayLabel ?: 'Not a working day'; }
+    // Different hours on this weekday (e.g. Monday 8:00-17:00, Tuesday 9:00-18:00): they replace the usual hours.
+    $dt = $schedule['day_times'][$wd] ?? null;
+    if ($dt && !empty($dt['report_time']) && !empty($dt['departure_time'])) {
+        $schedule['report_time'] = $dt['report_time'];
+        $schedule['arrival_time'] = $dt['arrival_time'] ?? null;
+        $schedule['departure_time'] = $dt['departure_time'];
+    }
+    // Breaks: those for every day (weekday 0) and those for this weekday only.
+    $breaks = array_values(array_filter($breaks, function ($b) use ($wd) { $w = (int) ($b['weekday'] ?? 0); return $w === 0 || $w === $wd; }));
 
     $report = tt_at($date, $schedule['report_time']);
     $roll = function (?string $t) use ($date, $report): ?int {

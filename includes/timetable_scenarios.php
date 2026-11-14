@@ -174,5 +174,17 @@ function tt_run_scenarios(): array
     // Extra: arriving after lunch: lunch time is not lost working time (but the lateness itself is shown in full)
     $c = tt_engine_compute($plan, ['check_in' => $t('15:00')], [], $t('15:30'));
     $check('Lunch missed because of lateness is not counted as lost work', ['minutes late' => [$c['late_arrival_minutes'], 480], 'lost' => [$c['lost_minutes'], 360]]);
+
+    // Extra: different hours per weekday (Monday 8:00-17:00, Tuesday 9:00-18:00 with a later lunch)
+    $sch = tt_scn_schedule(['day_times' => [1 => ['report_time' => '08:00:00', 'arrival_time' => null, 'departure_time' => '17:00:00'],
+                                            2 => ['report_time' => '09:00:00', 'arrival_time' => null, 'departure_time' => '18:00:00']]]);
+    $brs = [['id' => 21, 'label' => 'Lunch', 'break_type' => 'lunch', 'start_time' => '12:00:00', 'end_time' => '13:00:00', 'weekday' => 1],
+            ['id' => 22, 'label' => 'Lunch', 'break_type' => 'lunch', 'start_time' => '13:00:00', 'end_time' => '14:00:00', 'weekday' => 2],
+            ['id' => 23, 'label' => 'Tea', 'break_type' => 'break', 'start_time' => '10:00:00', 'end_time' => '10:15:00', 'weekday' => 0]];
+    $mon = tt_engine_plan($sch, $brs, '2026-11-16'); $tue = tt_engine_plan($sch, $brs, '2026-11-17'); $wed = tt_engine_plan($sch, $brs, '2026-11-18');
+    $check('Different working hours on different days', ['Monday reports 8:00' => [tt_hm($mon['report']), '08:00'], 'Tuesday reports 9:00' => [tt_hm($tue['report']), '09:00'],
+        'Tuesday leaves 18:00' => [tt_hm($tue['departure']), '18:00'], 'Wednesday uses the usual 7:00' => [tt_hm($wed['report']), '07:00'],
+        'Monday lunch 12:00' => [tt_hm($mon['breaks'][1]['start'] ?? null), '12:00'], 'Tuesday lunch 13:00' => [tt_hm($tue['breaks'][1]['start'] ?? null), '13:00'],
+        'tea every day' => [count($wed['breaks']), 1], '9:03 on Tuesday is on time' => [tt_engine_compute($tue, ['check_in' => $t('09:03', '2026-11-17')], [], $t('10:00', '2026-11-17'))['punctuality'], 'On Time']]);
     return $results;
 }

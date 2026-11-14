@@ -67,7 +67,7 @@ function tt_e($v): string { return htmlspecialchars((string) $v, ENT_QUOTES, 'UT
 
 /* ------------------------------------------------------------------ storage */
 
-const TT_SCHEMA_VERSION = '1';
+const TT_SCHEMA_VERSION = '2'; // 2: different hours per weekday (tt_schedule_days, tt_schedule_breaks.weekday)
 
 function tt_ensure(mysqli $conn): void
 {
@@ -93,6 +93,14 @@ function tt_ensure(mysqli $conn): void
     $q("CREATE TABLE IF NOT EXISTS tt_schedule_breaks (
         id INT(11) NOT NULL AUTO_INCREMENT, schedule_id INT(11) NOT NULL, label VARCHAR(60) NOT NULL, break_type VARCHAR(10) NOT NULL DEFAULT 'break',
         start_time TIME NOT NULL, end_time TIME NOT NULL, PRIMARY KEY (id), KEY schedule_id (schedule_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // v2: a break can be for one weekday only (0 = every working day).
+    $hasWd = mysqli_query($conn, "SHOW COLUMNS FROM tt_schedule_breaks LIKE 'weekday'");
+    if (!$hasWd || !mysqli_num_rows($hasWd)) { $q("ALTER TABLE tt_schedule_breaks ADD COLUMN weekday TINYINT NOT NULL DEFAULT 0"); }
+    // v2: different hours on some weekdays (e.g. Monday 8:00-17:00, Tuesday 9:00-18:00). No row = the usual hours.
+    $q("CREATE TABLE IF NOT EXISTS tt_schedule_days (
+        id INT(11) NOT NULL AUTO_INCREMENT, schedule_id INT(11) NOT NULL, weekday TINYINT NOT NULL,
+        report_time TIME NOT NULL, arrival_time TIME NULL, departure_time TIME NOT NULL,
+        PRIMARY KEY (id), UNIQUE KEY one_day (schedule_id, weekday)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $q("CREATE TABLE IF NOT EXISTS tt_events (
         id INT(11) NOT NULL AUTO_INCREMENT, user_id INT(11) NOT NULL, work_date DATE NOT NULL, event_type VARCHAR(20) NOT NULL,
         ref_id INT(11) NOT NULL DEFAULT 0, scheduled_at DATETIME NULL, actual_at DATETIME NOT NULL, diff_minutes INT(11) NULL,
@@ -308,6 +316,9 @@ function tt_contexts(mysqli $conn, string $from, string $to, ?array $userIds = n
         foreach (mysqli_fetch_all(mysqli_query($conn, 'SELECT * FROM tt_schedule_breaks WHERE schedule_id IN (' . implode(',', $sids) . ') ORDER BY start_time'), MYSQLI_ASSOC) as $b) {
             $breaks[(int) $b['schedule_id']][] = $b;
         }
+        $dayTimes = tt_day_times($conn, $sids);
+        foreach ($schedules as &$rows) { foreach ($rows as &$r) { $r['day_times'] = $dayTimes[(int) $r['id']] ?? []; } unset($r); }
+        unset($rows);
     }
     $holidays = tt_holidays($conn, $from, $to);
 
@@ -740,17 +751,43 @@ function tt_schedule_rows(mysqli $conn, int $userId): array
     $rows = mysqli_fetch_all(mysqli_query($conn, 'SELECT s.*, u.names AS created_by_name FROM tt_schedules s LEFT JOIN users u ON u.id = s.created_by
         WHERE s.user_id = ' . $userId . ' ORDER BY s.valid_from DESC, s.id DESC'), MYSQLI_ASSOC);
     foreach ($rows as &$r) {
-        $r['breaks'] = mysqli_fetch_all(mysqli_query($conn, 'SELECT * FROM tt_schedule_breaks WHERE schedule_id = ' . (int) $r['id'] . ' ORDER BY start_time'), MYSQLI_ASSOC);
+        $r['breaks'] = mysqli_fetch_all(mysqli_query($conn, 'SELECT * FROM tt_schedule_breaks WHERE schedule_id = ' . (int) $r['id'] . ' ORDER BY weekday, start_time'), MYSQLI_ASSOC);
+        $r['day_times'] = tt_day_times($conn, [(int) $r['id']])[(int) $r['id']] ?? [];
     }
     return $rows;
 }
+
+/** Different hours per weekday: [scheduleId => [weekday => ['report_time', 'arrival_time', 'departure_time']]]. */
+function tt_day_times(mysqli $conn, array $scheduleIds): array
+{
+    $ids = implode(',', array_map('intval', $scheduleIds));
+    if ($ids === '') { return []; }
+    $out = [];
+    foreach (mysqli_fetch_all(mysqli_query($conn, "SELECT * FROM tt_schedule_days WHERE schedule_id IN ($ids)"), MYSQLI_ASSOC) as $d) {
+        $out[(int) $d['schedule_id']][(int) $d['weekday']] = $d;
+    }
+    return $out;
+}
+
+/** One schedule with its breaks and per-day hours. */
+function tt_schedule_full(mysqli $conn, int $id): ?array
+{
+    $r = mysqli_fetch_assoc(mysqli_query($conn, 'SELECT * FROM tt_schedules WHERE id = ' . $id));
+    if (!$r) { return null; }
+    $r['breaks'] = mysqli_fetch_all(mysqli_query($conn, 'SELECT * FROM tt_schedule_breaks WHERE schedule_id = ' . $id . ' ORDER BY weekday, start_time'), MYSQLI_ASSOC);
+    $r['day_times'] = tt_day_times($conn, [$id])[$id] ?? [];
+    return $r;
+}
+
+const TT_WEEKDAYS = [1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri', 6 => 'Sat', 7 => 'Sun'];
 
 function tt_schedule_text(array $s): string
 {
     $days = ['1' => 'Mon', '2' => 'Tue', '3' => 'Wed', '4' => 'Thu', '5' => 'Fri', '6' => 'Sat', '7' => 'Sun'];
     $d = implode(', ', array_map(function ($x) use ($days) { return $days[$x] ?? $x; }, array_filter(explode(',', $s['working_days']), 'strlen')));
-    $b = implode('; ', array_map(function ($x) { return $x['label'] . ' ' . substr($x['start_time'], 0, 5) . '–' . substr($x['end_time'], 0, 5); }, $s['breaks'] ?? []));
-    return $d . ' · ' . substr($s['report_time'], 0, 5) . '–' . substr($s['departure_time'], 0, 5) . ($b ? ' · ' . $b : '')
+    $b = implode('; ', array_map(function ($x) use ($days) { return (!empty($x['weekday']) ? ($days[$x['weekday']] ?? '') . ' ' : '') . $x['label'] . ' ' . substr($x['start_time'], 0, 5) . '–' . substr($x['end_time'], 0, 5); }, $s['breaks'] ?? []));
+    $dt = implode(', ', array_map(function ($w, $x) use ($days) { return ($days[$w] ?? $w) . ' ' . substr($x['report_time'], 0, 5) . '–' . substr($x['departure_time'], 0, 5); }, array_keys($s['day_times'] ?? []), $s['day_times'] ?? []));
+    return ($dt ? $dt : $d . ' · ' . substr($s['report_time'], 0, 5) . '–' . substr($s['departure_time'], 0, 5)) . ($b ? ' · ' . $b : '')
         . (!empty($s['post_leave_main']) ? ' · post ' . ($s['post_name'] ?: '') . ' ' . substr($s['post_leave_main'], 0, 5) . '–' . substr((string) $s['post_return_main'], 0, 5) : '');
 }
 
@@ -775,8 +812,21 @@ function tt_save_schedule(mysqli $conn, array $data, int $actor): array
     $days = array_values(array_intersect(array_map('strval', (array) ($data['working_days'] ?? [])), ['1', '2', '3', '4', '5', '6', '7']));
     if (!$days) { return [false, 'Choose at least one working day.', 0]; }
     sort($days);
+    // Each working day has its own starting and ending time, set by the Administrator (day_times[weekday]).
+    $dayTimes = [];
+    if (!empty($data['day_times'])) {
+        foreach ($days as $w) {
+            $x = $data['day_times'][$w] ?? $data['day_times'][(int) $w] ?? [];
+            $dr = tt_valid_time($x['report'] ?? ''); $dd = tt_valid_time($x['departure'] ?? ''); $da = tt_valid_time($x['arrival'] ?? '');
+            if (!$dr || !$dd || $dr === $dd) { return [false, (TT_WEEKDAYS[(int) $w] ?? 'A working day') . ': enter the starting time and the ending time.', 0]; }
+            $dayTimes[(int) $w] = ['report_time' => $dr, 'arrival_time' => $da, 'departure_time' => $dd];
+        }
+        // The timetable row keeps the first working day's hours (used only if a day had no hours of its own).
+        $first = $dayTimes[(int) $days[0]];
+        $data['report_time'] = $first['report_time']; $data['departure_time'] = $first['departure_time']; $data['arrival_time'] = $first['arrival_time'];
+    }
     $report = tt_valid_time($data['report_time'] ?? ''); $dep = tt_valid_time($data['departure_time'] ?? '');
-    if (!$report || !$dep || $report === $dep) { return [false, 'Enter a valid reporting time and departure time.', 0]; }
+    if (!$report || !$dep || $report === $dep) { return [false, 'Enter the starting time and the ending time of each working day.', 0]; }
     $arrival = tt_valid_time($data['arrival_time'] ?? '');
     $ga = ($data['grace_arrival'] ?? '') === '' ? null : max(0, min(120, (int) $data['grace_arrival']));
     $gr = ($data['grace_return'] ?? '') === '' ? null : max(0, min(120, (int) $data['grace_return']));
@@ -790,18 +840,24 @@ function tt_save_schedule(mysqli $conn, array $data, int $actor): array
         $bs = tt_valid_time($b['start'] ?? ''); $be = tt_valid_time($b['end'] ?? '');
         if (!$bs && !$be) { continue; }
         if (!$bs || !$be || $bs === $be) { return [false, 'Every break needs a valid start and end time.', 0]; }
-        $breaks[] = ['label' => mb_substr(trim((string) ($b['label'] ?? '')) ?: 'Break', 0, 60), 'type' => ($b['type'] ?? '') === 'lunch' ? 'lunch' : 'break', 'start' => $bs, 'end' => $be];
+        $bw = (int) ($b['weekday'] ?? 0);
+        if ($bw && !in_array((string) $bw, $days, true)) { return [false, 'A break is set for ' . (TT_WEEKDAYS[$bw] ?? 'a day') . ', which is not a working day.', 0]; }
+        $breaks[] = ['label' => mb_substr(trim((string) ($b['label'] ?? '')) ?: 'Break', 0, 60), 'type' => ($b['type'] ?? '') === 'lunch' ? 'lunch' : 'break', 'start' => $bs, 'end' => $be, 'weekday' => $bw];
     }
-    // Check with the engine: breaks inside the working hours, not overlapping.
-    $probe = tt_engine_plan(['working_days' => '1,2,3,4,5,6,7', 'report_time' => $report, 'arrival_time' => $arrival, 'departure_time' => $dep,
-        'grace_arrival' => 0, 'grace_return' => 0], array_map(function ($b, $i) { return ['id' => $i + 1, 'label' => $b['label'], 'start_time' => $b['start'], 'end_time' => $b['end']]; }, $breaks, array_keys($breaks)), $from);
-    $prev = null;
-    foreach ($probe['breaks'] as $b) {
-        if ($b['start'] < $probe['report'] || $b['end'] > $probe['departure']) { return [false, '"' . $b['label'] . '" must be inside the working hours.', 0]; }
-        if ($prev && $b['start'] < $prev['end']) { return [false, 'Breaks must not overlap ("' . $prev['label'] . '" and "' . $b['label'] . '").', 0]; }
-        $prev = $b;
+    // Check every working day with the engine: breaks inside that day's hours, not overlapping.
+    foreach ($days as $w) {
+        $probeDate = date('Y-m-d', strtotime('next ' . ['', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][(int) $w], strtotime($from . ' -1 day')));
+        $probe = tt_engine_plan(['working_days' => '1,2,3,4,5,6,7', 'report_time' => $report, 'arrival_time' => $arrival, 'departure_time' => $dep, 'day_times' => $dayTimes,
+            'grace_arrival' => 0, 'grace_return' => 0], array_map(function ($b, $i) { return ['id' => $i + 1, 'label' => $b['label'], 'start_time' => $b['start'], 'end_time' => $b['end'], 'weekday' => $b['weekday']]; }, $breaks, array_keys($breaks)), $probeDate);
+        $prev = null;
+        $dn = TT_WEEKDAYS[(int) $w];
+        foreach ($probe['breaks'] as $b) {
+            if ($b['start'] < $probe['report'] || $b['end'] > $probe['departure']) { return [false, $dn . ': "' . $b['label'] . '" (' . tt_hm($b['start']) . '–' . tt_hm($b['end']) . ') must be inside that day\'s working hours (' . tt_hm($probe['report']) . '–' . tt_hm($probe['departure']) . ').', 0]; }
+            if ($prev && $b['start'] < $prev['end']) { return [false, $dn . ': breaks must not overlap ("' . $prev['label'] . '" and "' . $b['label'] . '").', 0]; }
+            $prev = $b;
+        }
+        if (tt_engine_scheduled_minutes($probe) <= 0) { return [false, $dn . ': the breaks take the whole working day.', 0]; }
     }
-    if (tt_engine_scheduled_minutes($probe) <= 0) { return [false, 'The breaks take the whole working day.', 0]; }
     $note = mb_substr(trim((string) ($data['note'] ?? '')), 0, 500);
     $title = mb_substr(trim((string) ($data['title'] ?? '')), 0, 120) ?: null;
     $wd = implode(',', $days);
@@ -815,8 +871,10 @@ function tt_save_schedule(mysqli $conn, array $data, int $actor): array
         mysqli_stmt_bind_param($s, 'issssssssiissssssi', $uid, $kind, $title, $from, $to, $wd, $report, $arrival, $dep, $ga, $gr, $pn, $pl, $pa, $pd, $pr, $note, $actor);
         mysqli_stmt_execute($s);
         $id = (int) mysqli_insert_id($conn);
-        $bi = mysqli_prepare($conn, 'INSERT INTO tt_schedule_breaks (schedule_id, label, break_type, start_time, end_time) VALUES (?, ?, ?, ?, ?)');
-        foreach ($breaks as $b) { mysqli_stmt_bind_param($bi, 'issss', $id, $b['label'], $b['type'], $b['start'], $b['end']); mysqli_stmt_execute($bi); }
+        $bi = mysqli_prepare($conn, 'INSERT INTO tt_schedule_breaks (schedule_id, label, break_type, start_time, end_time, weekday) VALUES (?, ?, ?, ?, ?, ?)');
+        foreach ($breaks as $b) { mysqli_stmt_bind_param($bi, 'issssi', $id, $b['label'], $b['type'], $b['start'], $b['end'], $b['weekday']); mysqli_stmt_execute($bi); }
+        $di = mysqli_prepare($conn, 'INSERT INTO tt_schedule_days (schedule_id, weekday, report_time, arrival_time, departure_time) VALUES (?, ?, ?, ?, ?)');
+        foreach ($dayTimes as $w => $x) { mysqli_stmt_bind_param($di, 'iisss', $id, $w, $x['report_time'], $x['arrival_time'], $x['departure_time']); mysqli_stmt_execute($di); }
 
         $replaced = [];
         if ($kind === 'permanent') {
@@ -832,7 +890,8 @@ function tt_save_schedule(mysqli $conn, array $data, int $actor): array
             }
         }
         $row = mysqli_fetch_assoc(mysqli_query($conn, 'SELECT * FROM tt_schedules WHERE id = ' . $id));
-        $row['breaks'] = array_map(function ($b) { return ['label' => $b['label'], 'start_time' => $b['start'], 'end_time' => $b['end']]; }, $breaks);
+        $row['breaks'] = array_map(function ($b) { return ['label' => $b['label'], 'start_time' => $b['start'], 'end_time' => $b['end'], 'weekday' => $b['weekday']]; }, $breaks);
+        $row['day_times'] = $dayTimes;
         tt_audit($conn, $actor, $uid, 'schedule', $id, $kind === 'temporary' ? 'temporary_adjustment' : 'new_version',
             ucfirst($kind) . ' timetable from ' . $from . ($to ? ' to ' . $to : '') . ': ' . tt_schedule_text($row)
             . ($replaced ? '. Replaces version(s) #' . implode(', #', $replaced) . ' from this date.' : '') . ($note !== '' ? ' Note: ' . $note : ''));
