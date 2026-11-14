@@ -5,6 +5,7 @@
  * this month's punctuality, and the next working day. Updates by itself (rm_clock.js).
  */
 require '../../config/db.php';
+if (current_user_role() === 'Admin') { require_once '../../includes/admin_error_guard.php'; } // an Admin sees the exact reason instead of "HTTP ERROR 500"
 require_once '../../includes/timetable_helpers.php';
 tt_ensure($conn);
 

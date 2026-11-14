@@ -19,6 +19,7 @@
  * leave day; the timed types below change the day's rules for their hours.
  */
 require_once __DIR__ . '/timetable_engine.php';
+require_once __DIR__ . '/access_control.php'; // access_can(): needed even where config/db.php does not load it (live server)
 require_once __DIR__ . '/mailer.php';
 
 /** Leave types with hours (one date, start and end time), and what each one does in the timetable. */

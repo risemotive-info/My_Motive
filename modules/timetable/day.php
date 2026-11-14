@@ -6,7 +6,7 @@
  * Employees see their own days; supervisors their team's, and can give more time (break / post) for today.
  */
 require '../../config/db.php';
-if (current_user_role() === 'Admin') { require_once '../../includes/admin_error_guard.php'; }
+if (current_user_role() === 'Admin') { require_once '../../includes/admin_error_guard.php'; } // an Admin sees the exact reason instead of "HTTP ERROR 500"
 require_once '../../includes/timetable_helpers.php';
 tt_ensure($conn);
 

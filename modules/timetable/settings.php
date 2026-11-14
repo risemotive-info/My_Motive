@@ -5,6 +5,7 @@
  * the notification delivery history and the self-test. Every change is in the audit trail.
  */
 require '../../config/db.php';
+if (current_user_role() === 'Admin') { require_once '../../includes/admin_error_guard.php'; } // an Admin sees the exact reason instead of "HTTP ERROR 500"
 require_once '../../includes/timetable_helpers.php';
 require_role(['Admin']);
 tt_ensure($conn);
