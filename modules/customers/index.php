@@ -11,6 +11,7 @@ include '../../includes/sidebar.php';
 
 const PER_PAGE = 10;
 $canSendSms = in_array(current_user_role(), ['Admin', 'Manager'], true) && mm_has_feature('sms'); // PACKAGES // NEW: same roles as the Send SMS page
+$canEdit = in_array(current_user_role(), ['Admin', 'Manager'], true); // editing does not depend on the SMS package
 
 $currentPage = get_current_page();
 $totalRows = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM customers WHERE is_active = 1"))['c'];
@@ -98,8 +99,8 @@ $customers = mysqli_query($conn, "SELECT customers.*,
         <span class="badge bg-<?= $creditStatus === 'Allowed' ? 'success' : 'danger'; ?>"><?= htmlspecialchars($creditStatus, ENT_QUOTES, 'UTF-8'); ?></span>
     </td>
     <td class="text-nowrap">
-        <?php if ($canSendSms) { ?>
-            <!-- CHANGED (Task 5): only Admins and Managers can edit customers -->
+        <?php if ($canEdit) { ?>
+            <!-- only Admins and Managers can edit customers (edit.php checks this again on the server) -->
             <a href="edit.php?id=<?= (int) $customer['id']; ?>" class="rm-btn rm-btn-warning rm-btn-sm">Edit</a>
         <?php } ?>
         <?php if ($canSendSms) { ?>
